@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#315c46">
+  <title>GTD</title>
+
+
+  <link rel="stylesheet" href="/assets/app.css">
+  <link rel="stylesheet" href="/assets/local-calendar.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/tasks">GTD</a>
+    <nav id="desktop-navigation" class="desktop-navigation" aria-label="主な画面">
+      <a data-primary-nav href="/tasks">Focus</a>
+      <a data-primary-nav href="/inbox">Inbox <span id="inbox-count-desktop" class="nav-count" hidden></span></a>
+      <a data-primary-nav href="/projects">方向性</a>
+      <a data-primary-nav href="/reviews/weekly">Review</a>
+      <a data-primary-nav href="/calendar">カレンダー</a>
+      <a data-primary-nav href="/search">Task検索</a>
+    </nav>
+    <div class="header-actions">
+      <button id="open-capture-desktop" class="header-capture" type="button" aria-label="Captureを開く">＋ Capture</button>
+      <details class="overflow-menu">
+        <summary aria-label="その他の画面">その他</summary>
+        <div class="overflow-menu-popover"><a href="/search">Task検索</a><a href="/status">Status</a></div>
+      </details>
+    </div>
+  </header>
+
+  <main id="main-content">
+    <!-- preview-read-only-banner -->
+    <div id="error-banner" class="banner error" role="alert" hidden></div>
+    <button id="retry-current" class="secondary retry-button" type="button" hidden>再試行</button>
+    <div id="notice" class="banner notice" role="status" aria-live="polite" hidden></div>
+
+    <section id="task-list-workflow" class="screen" aria-labelledby="tasks-heading" hidden>
+      <div class="page-heading">
+        <div><p id="focus-date" class="eyebrow"></p><h1 id="tasks-heading">Focus</h1></div>
+        <button id="open-focus-pip" class="secondary focus-pip-trigger" type="button" hidden>最前面表示</button>
+        <button id="reload-tasks" class="visually-hidden" type="button" hidden>再読み込み</button>
+      </div>
+      <p id="task-list-state" class="visually-hidden" role="status" aria-live="polite"></p>
+
+      <section id="task-current-group" class="task-group" aria-labelledby="task-current-heading">
+        <h2 id="task-current-heading">実行中</h2>
+        <ul id="task-current-list" class="entity-list"></ul>
+        <div id="focus-secondary-actions" class="focus-secondary-actions" hidden><button id="break-start" class="secondary focus-break-action" data-mutation type="button">5分休憩</button><button id="focus-notification-pause" class="secondary focus-break-action" data-mutation type="button" hidden>通知OFF</button></div>
+      </section>
+      <form id="quick-start-form" class="quick-start-form">
+        <div class="field quick-start-title-field"><label for="quick-start-title">今から始めるTask</label><input id="quick-start-title" name="title" type="text" required autocomplete="off" maxlength="300" role="combobox" aria-autocomplete="list" aria-controls="quick-start-suggestions" aria-expanded="false"><div id="quick-start-suggestions" class="quick-start-suggestions" role="listbox" aria-label="過去のTask候補" hidden></div></div>
+        <div id="quick-start-area-picker" class="field area-picker" aria-label="Quick StartのArea"></div>
+        <button id="quick-start-submit" class="primary" data-mutation type="submit">開始</button>
+      </form>
+      <details id="focus-filter-details" class="focus-filter-panel" aria-label="Focusの表示条件">
+        <summary id="focus-filter-summary">絞り込み（0件）</summary>
+        <div class="focus-filter-content">
+          <div class="focus-filter-control"><span id="focus-status-label" class="focus-filter-label">状態</span><div class="focus-status-tabs focus-filter-controls" role="group" aria-labelledby="focus-status-label">
+            <button id="focus-status-candidates" class="secondary" type="button" aria-pressed="true">次にやる＋予定</button>
+            <button id="focus-status-next" class="secondary" type="button" aria-pressed="false">次にやる</button>
+            <button id="focus-status-scheduled" class="secondary" type="button" aria-pressed="false">予定</button>
+            <button id="focus-status-waiting" class="secondary" type="button" aria-pressed="false">待機</button>
+            <button id="focus-status-someday" class="secondary" type="button" aria-pressed="false">いつかやる</button>
+          </div></div>
+          <form id="task-filter-form" class="filter-form">
+            <div class="field"><label for="task-filter-context">Context</label><input id="task-filter-context" autocomplete="off"></div>
+            <div class="field"><label for="task-filter-project">Project</label><select id="task-filter-project"><option value="">すべて</option></select></div>
+            <div class="field"><label for="task-filter-area">Area</label><select id="task-filter-area"><option value="">すべて</option></select></div>
+            <div class="field"><label for="task-filter-minutes">使える時間（分）</label><input id="task-filter-minutes" inputmode="numeric"></div>
+            <div class="field"><label for="task-filter-due">期限の上限</label><input id="task-filter-due" autocomplete="off"></div>
+            <div class="form-actions"><button class="primary" type="submit">適用</button><button id="clear-task-filters" class="secondary" type="button">クリア</button></div>
+          </form>
+        </div>
+      </details>
+      <div id="task-filter-chips" class="filter-chips" aria-live="polite"></div>
+      <div id="focus-action-board" class="focus-action-board" aria-label="対応予定日別の次にやるTask">
+        <section class="focus-action-section" data-focus-section="today"><button id="focus-section-today" class="focus-section-heading" type="button" aria-expanded="true">今日やる <span></span></button><form id="focus-today-add-form" class="focus-today-add-form"><div class="field"><label for="focus-today-add-title">今日やるTaskを追加</label><input id="focus-today-add-title" name="title" type="text" required autocomplete="off" maxlength="300"></div><button id="focus-today-add-submit" class="primary" data-mutation type="submit">追加</button></form><ul id="focus-section-today-list" class="entity-list"></ul></section>
+        <section class="focus-action-section" data-focus-section="undated"><button id="focus-section-undated" class="focus-section-heading" type="button" aria-expanded="true">予定日なし <span></span></button><ul id="focus-section-undated-list" class="entity-list"></ul></section>
+        <section class="focus-action-section" data-focus-section="dated"><button id="focus-section-dated" class="focus-section-heading" type="button" aria-expanded="true">予定日あり <span></span></button><ul id="focus-section-dated-list" class="entity-list"></ul></section>
+        <div id="focus-archive-drop-target" class="focus-archive-drop-target" aria-label="アーカイブ: ここにドロップ" hidden><span class="focus-archive-drop-icon" aria-hidden="true">×</span><span>アーカイブ</span></div>
+      </div>
+      <section id="focus-cycle-context" class="focus-cycle-context" aria-label="Active Cycleと次の行動"></section>
+      <div id="task-incomplete-group">
+        <div class="list-heading">
+          <h2><span id="task-incomplete-heading">次にやる＋予定</span> <span id="task-incomplete-count" class="heading-count"></span></h2>
+        </div>
+        <ul id="task-incomplete-list" class="entity-list" aria-labelledby="task-incomplete-heading"></ul>
+      </div>
+      <details id="task-completed-details" class="completed-task-group">
+        <summary><span id="completed-heading">今日の完了済み</span> <span id="completed-count"></span></summary>
+        <div class="completed-period-controls"><p id="completed-period-note" class="muted">完了済みの表示は上の絞り込み条件の対象外です。</p><button id="completed-period-toggle" class="secondary" type="button">過去の完了も表示</button></div>
+        <ul id="task-completed-list" class="entity-list"></ul>
+      </details>
+    </section>
+
+    <section id="inbox-workflow" class="screen" aria-labelledby="inbox-heading" hidden>
+      <div class="page-heading">
+        <div><p class="eyebrow">未整理</p><h1 id="inbox-heading">Inbox <span id="inbox-heading-count"></span></h1></div>
+        <button id="open-capture-inbox" class="primary compact-button" type="button">＋ Capture</button>
+        <button id="reload-inbox" class="visually-hidden" type="button" hidden>再読み込み</button>
+      </div>
+      <p id="inbox-state" class="muted" role="status" aria-live="polite">読み込み中です。</p>
+      <button id="open-capture-empty" class="primary inbox-empty-capture" type="button" hidden>Captureを始める</button>
+      <div class="inbox-v2-layout">
+        <section class="inbox-queue-panel"><h2>未整理</h2><ul id="inbox-queue" class="inbox-queue" aria-describedby="inbox-state"></ul><ul id="inbox-list" class="visually-hidden" hidden aria-hidden="true"></ul><p class="inbox-drag-help">カードをドラッグして、行き先を選びます</p></section>
+        <section id="inbox-lanes" class="inbox-lanes" aria-label="行き先を選ぶ"><h2>行き先</h2><div class="inbox-lane-grid"><button class="inbox-lane" type="button" data-inbox-stage-status="next">次にやる<span>ここにドロップ</span></button><button class="inbox-lane" type="button" data-inbox-stage-status="waiting">待機<span>ここにドロップ</span></button><button class="inbox-lane" type="button" data-inbox-stage-status="scheduled">予定<span>ここにドロップ</span></button><button class="inbox-lane" type="button" data-inbox-stage-status="someday">いつかやる<span>ここにドロップ</span></button><button class="inbox-lane inbox-archive-lane" type="button" data-inbox-archive="true">アーカイブ<span>ここにドロップ</span></button></div></section>
+        <form id="inbox-stage-sheet" class="inbox-stage-sheet" hidden>
+          <h2>整理内容を確認</h2>
+          <p>ドラッグしただけでは保存されません。</p>
+          <details id="inbox-stage-details" class="form-disclosure task-settings-group" data-task-settings-group="basic" open><summary>基本</summary><div class="form-grid clarify-advanced-fields"><div class="field"><span class="field-label">Task名（次の行動）</span><p id="inbox-stage-title-summary" class="inbox-stage-title-summary"></p><button id="inbox-stage-edit-title" class="secondary" type="button">Task名を編集</button><input id="inbox-stage-title" required maxlength="300" hidden></div><fieldset id="inbox-stage-destinations" class="inbox-stage-destinations"><legend>ステータス（行き先）を選ぶ</legend><div id="inbox-stage-status-buttons"></div></fieldset><p id="inbox-stage-destination-readonly" class="inbox-stage-destination-readonly" hidden></p><div class="field"><label for="inbox-stage-project">Project</label><select id="inbox-stage-project"><option value="">リンクなし</option></select></div><div id="inbox-stage-area-field" class="field"><label for="inbox-stage-area">Area</label><select id="inbox-stage-area" data-allocation-picker><option value="">リンクなし</option></select><p id="inbox-stage-area-inherited" class="field-help"></p></div></div></details>
+          <details class="form-disclosure task-settings-group" data-task-settings-group="date_time"><summary>日付・時刻</summary><div class="form-grid clarify-advanced-fields"><div class="field"><label for="inbox-stage-due">期限</label><input id="inbox-stage-due" type="date"></div><div id="inbox-stage-action-date-field" class="field" hidden><label for="inbox-stage-action-date">対応予定日</label><input id="inbox-stage-action-date" type="date" autocomplete="off"></div><div id="inbox-stage-available-from-field" class="field"><label for="inbox-stage-available-from">着手可能日</label><input id="inbox-stage-available-from" type="date" autocomplete="off"></div><div class="field"><label for="inbox-stage-available-time">時刻（任意・JST）</label><input id="inbox-stage-available-time" type="time" step="60" autocomplete="off"></div><div id="inbox-stage-scheduled-field" class="form-grid clarify-scheduled-fields"><div class="field"><label for="inbox-stage-start">開始日時（JST）</label><input id="inbox-stage-start" type="datetime-local" step="1" autocomplete="off"></div><div class="field"><label for="inbox-stage-end">終了日時（JST）</label><input id="inbox-stage-end" type="datetime-local" step="1" autocomplete="off"></div></div></div></details>
+          <details class="form-disclosure task-settings-group" data-task-settings-group="start_conditions"><summary>開始条件</summary><div id="inbox-stage-waiting-field" class="field"><label for="inbox-stage-waiting">待っている対象</label><input id="inbox-stage-waiting"></div><div class="field"><label for="inbox-stage-depends-on">前提Task ID（カンマ区切り）</label><input id="inbox-stage-depends-on" autocomplete="off"></div></details>
+          <details class="form-disclosure task-settings-group" data-task-settings-group="work_info"><summary>作業情報</summary><div class="form-grid clarify-advanced-fields"><div class="field"><label for="inbox-stage-contexts">Contexts</label><input id="inbox-stage-contexts"></div><div class="field"><label for="inbox-stage-estimated-minutes">見積（分）</label><input id="inbox-stage-estimated-minutes" type="number" min="1"></div></div></details>
+          <details class="form-disclosure task-settings-group" data-task-settings-group="body"><summary>本文</summary><div class="field"><label for="inbox-stage-body">本文</label><textarea id="inbox-stage-body" rows="7"></textarea></div></details>
+          <div class="form-actions"><button id="inbox-stage-cancel" class="secondary" type="button">戻す</button><button id="inbox-stage-confirm" class="primary" data-mutation type="submit">確認して保存</button></div>
+        </form>
+      </div>
+    </section>
+
+    <section id="task-search-workflow" class="screen" aria-labelledby="task-search-heading" hidden>
+      <div class="page-heading"><div><p class="eyebrow">全Task</p><h1 id="task-search-heading">Task検索</h1></div></div>
+      <p class="muted">タイトル・ID・本文を検索します。完了を含むすべての状態が対象です。空白区切りですべての語を含むTaskを検索します。</p><form id="task-search-form" class="task-search-form"><div class="field"><label for="task-search-input">キーワード</label><input id="task-search-input" type="search" maxlength="300" autocomplete="off" autofocus></div><label class="task-search-archived"><input id="task-search-archived" type="checkbox">保管済みも含める</label><div class="form-actions"><button class="primary" type="submit">検索</button></div></form>
+      <p id="task-search-state" class="muted" role="status" aria-live="polite"></p><button id="task-search-retry" class="secondary" type="button" hidden>再試行</button><ul id="task-search-results" class="entity-list"></ul><div id="task-search-paging" class="form-actions"></div>
+    </section>
+
+    <section id="clarify-workflow" class="screen" aria-labelledby="clarify-heading" hidden>
+      <div class="page-heading"><div><p class="eyebrow">Clarify</p><h1 id="clarify-heading">Taskを明確化</h1></div><button id="reload-clarify" class="visually-hidden" type="button" hidden>再読み込み</button></div>
+      <p id="clarify-state" class="muted" role="status" aria-live="polite"></p>
+      <form id="clarify-form" class="form-panel">
+        <details class="form-disclosure task-settings-group" data-task-settings-group="basic" open><summary>基本</summary><div class="form-grid clarify-advanced-fields">
+          <div class="field"><label for="clarify-title">タイトル</label><input id="clarify-title" required maxlength="300"></div>
+          <div class="field"><label for="clarify-status">状態</label><select id="clarify-status"><option>inbox</option><option value="planned">planned</option><option>next</option><option>doing</option><option>waiting</option><option>scheduled</option><option>someday</option><option>done</option></select></div>
+          <div class="field"><label for="clarify-project-id">Project</label><select id="clarify-project-id"><option value="">リンクなし</option></select><a id="clarify-project-detail-link" href="/projects?level=projects" hidden>選択中のProjectを開く</a></div>
+          <div class="field"><label for="clarify-area-id">直接Area</label><select id="clarify-area-id" data-allocation-picker><option value="">リンクなし</option></select><p id="clarify-area-inherited" class="field-help"></p></div>
+        </div><div id="clarify-continuations"></div></details>
+        <details class="form-disclosure task-settings-group" data-task-settings-group="date_time"><summary>日付・時刻</summary>
+          <div class="form-grid clarify-advanced-fields">
+          <div class="field"><label for="clarify-due">期限</label><input id="clarify-due" type="date" autocomplete="off"></div>
+          <div id="clarify-action-date-field" class="field"><label for="clarify-action-date">対応予定日</label><input id="clarify-action-date" type="date" autocomplete="off"><p class="field-help">期限や固定時刻とは別。Inbox・plannedの既存値もここで明示的に解除できます。</p></div>
+          <div class="field"><label for="clarify-available-from">着手可能日</label><input id="clarify-available-from" type="date" autocomplete="off"><p class="field-help">この日になるまでTaskは待機になります。</p></div>
+          <div class="field"><label for="clarify-available-time">時刻（任意・JST）</label><input id="clarify-available-time" type="time" step="60" autocomplete="off"><p class="field-help">指定すると、この時刻までTaskは待機になります。</p></div>
+          <div id="clarify-scheduled-fields" class="form-grid clarify-scheduled-fields" hidden><div class="field"><label for="clarify-scheduled-start">開始日時（JST）</label><input id="clarify-scheduled-start" type="datetime-local" step="1" autocomplete="off"></div><div class="field"><label for="clarify-scheduled-end">終了日時（JST）</label><input id="clarify-scheduled-end" type="datetime-local" step="1" autocomplete="off"></div></div>
+          </div></details>
+        <details class="form-disclosure task-settings-group" data-task-settings-group="start_conditions"><summary>開始条件</summary>
+          <div class="clarify-advanced-fields clarify-start-conditions-fields"><div id="clarify-waiting-field" class="field" hidden><label for="clarify-waiting-for">待っている対象</label><input id="clarify-waiting-for"></div>
+          <div class="field clarify-dependency-field"><label for="clarify-dependency-search">前提Task</label><input id="clarify-dependency-search" type="search" autocomplete="off" placeholder="Taskを検索…"><div id="clarify-dependency-options" class="dependency-options" role="group" aria-label="前提Taskの候補"></div><div id="clarify-dependency-chips" class="dependency-chips" aria-live="polite"></div></div></div>
+        </details>
+        <details id="clarify-advanced" class="form-disclosure clarify-advanced task-settings-group" data-task-settings-group="work_info"><summary>作業情報</summary><div class="form-grid clarify-advanced-fields"><div class="field"><label for="clarify-contexts">Contexts（カンマ区切り）</label><input id="clarify-contexts" autocomplete="off"></div><div class="field"><label for="clarify-estimated-minutes">所要分</label><input id="clarify-estimated-minutes" inputmode="numeric"></div></div></details>
+        <details class="form-disclosure task-settings-group" data-task-settings-group="body" open><summary>本文</summary><div class="field clarify-body-field"><div class="clarify-body-heading"><label class="visually-hidden" for="clarify-body">本文</label><div class="clarify-body-tabs" role="group" aria-label="本文の表示"><button id="clarify-body-edit" class="secondary" type="button" aria-pressed="true" aria-controls="clarify-body">編集</button><button id="clarify-body-preview" class="secondary" type="button" aria-pressed="false" aria-controls="clarify-body-preview-region">プレビュー</button></div></div><textarea id="clarify-body" rows="7"></textarea><div id="clarify-body-preview-region" class="markdown-preview" aria-live="polite" hidden></div></div></details>
+        <div class="form-actions split clarify-actions"><button id="archive-task" class="secondary" data-mutation type="button">アーカイブ</button><div id="clarify-save-bar"><button id="preview-clarify" class="primary" data-mutation type="submit">保存</button></div></div>
+      </form>
+    </section>
+
+    <section id="projects-workflow" class="screen" aria-labelledby="projects-heading" hidden>
+      <div class="page-heading"><div><p class="eyebrow">H5〜H1</p><h1 id="projects-heading">方向性</h1></div><button id="reload-projects" class="visually-hidden" type="button" hidden>再読み込み</button><button id="reload-goals" class="visually-hidden" type="button" hidden>再読み込み</button></div>
+      <div class="direction-layout">
+      <nav class="tabs direction-tabs" aria-label="方向性の階層">
+        <a id="purpose-tab" href="/projects?level=purpose">Purpose</a><a id="visions-tab" href="/projects?level=visions">Vision</a>
+        <a id="goals-tab" href="/projects?level=goals">Goals</a><a id="areas-tab" href="/projects?level=areas">Areas</a>
+        <a id="projects-tab" href="/projects?level=projects">Projects</a><a id="direction-review-tab" href="/projects?mode=review">見直し</a>
+      </nav>
+      <div class="direction-content">
+      <section id="direction-overview" class="direction-overview" aria-label="方向性の全体像">
+        <section class="value-lantern-hero" aria-labelledby="value-lantern-title">
+          <button id="value-lantern-open" class="value-lantern-image-button" type="button" aria-haspopup="dialog" aria-label="Value Lanternの図解を拡大して開く"><img id="value-lantern-image" src="/assets/local-background.svg" width="941" height="1672" alt="Value Lanternの図解。詳細は本文と拡大表示で読めます。"></button>
+          <div class="value-lantern-copy"><p class="eyebrow">Direction</p><h2 id="value-lantern-title">Value Lantern</h2><p>守りたい余白と、生み出したい光を見失わないための短い地図です。</p><h3 id="value-lantern-transcript-heading" class="visually-hidden">Value Lanternの構成</h3><dl id="value-lantern-transcript" class="value-lantern-transcript" aria-labelledby="value-lantern-transcript-heading"><div><dt>HANDLE</dt><dd>技術だけを追う / 誰にも使われない / 余白を削り続ける</dd></div><div><dt>PROTECTION</dt><dd>探索する時間 / 選べる自由 / 家族と健康 / 回復・没頭の余白</dd></div><div><dt>FLAME</dt><dd>価値ある可能性を実際に使い、味わえる新しい形にする</dd></div><div><dt>LIGHT</dt><dd>新しいサービス・仕組み・曲 / 便利さと楽しさ</dd></div></dl><p class="value-lantern-closing">手放したと気づいたら、もう一度つかむ</p><button class="secondary value-lantern-open-copy" type="button">図解を拡大</button></div>
+        </section>
+        <p id="direction-state" class="muted" role="status"></p><p class="direction-allocation-links"><a href="/reviews/weekly?tab=allocation&axis=area">Area配分を見る</a> · <a href="/reviews/weekly?tab=allocation&axis=goal">Goal配分を見る</a></p><div id="direction-cards" class="direction-cards"></div>
+        <section id="direction-roadmap-summary" class="attention-block direction-roadmap-summary" aria-labelledby="direction-roadmap-heading"><div class="list-heading"><h2 id="direction-roadmap-heading">Goal別 Roadmap</h2><a class="button-link" href="/roadmap">Roadmapを開く</a></div><ul id="direction-roadmap-list" class="simple-list"></ul></section>
+      </section>
+      <section id="direction-review" class="review-facts" hidden><h2>見直しの目安</h2><p>H1は週次、H2は月次、H3は四半期、H4/H5は必要時に確認します。</p></section>
+      <div id="purpose-view" class="direction-pane" hidden><a class="button-link" href="/projects">方向性に戻る</a><p id="purpose-state" class="muted"></p><ul id="purposes-list" class="entity-list"></ul><details id="purpose-form-disclosure" class="form-disclosure"><summary>＋ Purposeを追加</summary><form id="purpose-form" class="form-panel"><div class="field"><label for="purpose-title">タイトル</label><input id="purpose-title" required maxlength="300"></div><div class="field"><label for="purpose-body">本文</label><textarea id="purpose-body" rows="6"></textarea></div><div class="form-actions"><button id="cancel-purpose-edit" class="secondary" type="button" hidden>編集をやめる</button><button id="archive-purpose" class="secondary" data-mutation type="button" hidden>アーカイブ</button><button id="preview-purpose" class="primary" data-mutation type="submit">作成</button></div></form></details></div>
+      <div id="visions-view" class="direction-pane" hidden><a class="button-link" href="/projects">方向性に戻る</a><p id="visions-state" class="muted"></p><ul id="visions-list" class="entity-list"></ul><details id="vision-form-disclosure" class="form-disclosure"><summary>＋ Visionを追加</summary><form id="vision-form" class="form-panel"><div class="field"><label for="vision-title">タイトル</label><input id="vision-title" required maxlength="300"></div><div class="field"><label for="vision-status">状態</label><select id="vision-status"><option>active</option><option>on_hold</option><option>realized</option><option>dropped</option></select></div><div class="field"><label for="vision-body">本文</label><textarea id="vision-body" rows="6"></textarea></div><div class="form-actions"><button id="cancel-vision-edit" class="secondary" type="button" hidden>編集をやめる</button><button id="archive-vision" class="secondary" data-mutation type="button" hidden>アーカイブ</button><button id="preview-vision" class="primary" data-mutation type="submit">作成</button></div></form></details></div>
+      <div id="areas-view" class="direction-pane" hidden><a class="button-link" href="/projects">方向性に戻る</a><p id="areas-state" class="muted"></p><section id="area-detail" class="attention-block" hidden><div class="list-heading"><h2>Area詳細</h2><button id="close-area-detail" class="secondary" type="button">一覧へ戻る</button></div><div id="area-detail-content"></div></section><ul id="areas-list" class="entity-list"></ul><details id="area-form-disclosure" class="form-disclosure"><summary>＋ Areaを追加</summary><form id="area-form" class="form-panel"><div class="field"><label for="area-title">タイトル</label><input id="area-title" required maxlength="300"></div><div class="field"><label for="area-health">状態</label><select id="area-health"><option value="">未確認</option><option>maintained</option><option>needs_attention</option></select></div><div class="field"><label for="area-body">本文</label><textarea id="area-body" rows="6"></textarea></div><div class="form-actions"><button id="cancel-area-edit" class="secondary" type="button" hidden>編集をやめる</button><button id="archive-area" class="secondary" data-mutation type="button" hidden>アーカイブ</button><button id="preview-area" class="primary" data-mutation type="submit">作成</button></div></form></details></div>
+
+      <div id="projects-view">
+        <section id="project-detail" class="project-detail" aria-labelledby="project-detail-heading" hidden><div class="list-heading"><div><p class="eyebrow">Project</p><h2 id="project-detail-heading" tabindex="-1">Project詳細</h2></div><div class="form-actions"><button id="project-detail-edit" class="secondary" type="button">Projectを編集</button><a id="project-detail-back" class="button-link" href="/projects?level=projects">一覧へ戻る</a></div></div><nav id="project-detail-lineage" aria-label="Projectの上位リンク" hidden></nav><p id="project-detail-period" class="muted"></p><p id="project-status-live" class="muted" role="status" aria-live="polite"></p><section class="project-detail-controls" aria-label="Projectの状態"><label for="project-detail-status">状態</label><select id="project-detail-status" data-mutation><option value="not_started">未着手</option><option value="doing">進行中</option><option value="on_hold">保留</option><option value="completed">完了</option><option value="dropped">中止</option></select></section><section id="project-support" class="project-support-section" aria-labelledby="project-support-heading"><h3 id="project-support-heading">Project Support</h3><details id="project-support-editor" class="form-disclosure"><summary>メモを編集</summary><form id="project-support-form" class="form-panel"><div class="field"><label for="project-support-body">Support / メモ</label><textarea id="project-support-body" rows="5"></textarea></div><div class="form-actions"><button id="project-support-preview" class="primary" data-mutation type="submit">内容を確認</button></div></form></details><section id="project-plan-forest" class="project-plan-forest" aria-labelledby="project-plan-forest-heading"><div class="list-heading"><h4 id="project-plan-forest-heading">計画ツリー</h4><button id="project-plan-open" class="secondary" type="button" aria-expanded="false" aria-controls="project-task-plan-form">計画を編集</button></div><label class="project-completed-toggle"><input id="project-plan-done-toggle" type="checkbox"> 完了を表示</label><div id="project-plan-viewport" class="project-tree-viewport" tabindex="0" aria-label="計画ツリー"><div class="project-tree-toolbar" aria-label="表示倍率"><button id="project-plan-zoom-out" class="secondary" type="button" aria-label="縮小">−</button><output id="project-plan-zoom-value">100%</output><button id="project-plan-zoom-in" class="secondary" type="button" aria-label="拡大">＋</button><button id="project-plan-zoom-reset" class="secondary" type="button">100%</button><button id="project-plan-zoom-fit" class="secondary" type="button">全体表示</button></div><div id="project-plan-canvas" class="project-tree-canvas"><ul id="project-plan-tree" class="entity-list"></ul><form id="project-task-plan-form" class="project-plan-inline-editor" hidden><p id="project-plan-help" class="muted">Taskを選ぶと編集操作を表示します。最上位Taskは「計画」または「次にやる」を選べます。子Taskは計画として保存されます。</p><div id="project-plan-rows" class="project-plan-rows" aria-describedby="project-plan-help"></div><div class="project-plan-edit-actions"><button id="project-plan-add-root" class="secondary" type="button">最上位Taskを追加</button><button id="project-plan-close" class="secondary" type="button">編集をやめる</button><button id="project-task-plan-preview" class="primary" data-mutation type="submit">内容を確認</button></div></form></div></div></section></section><section class="project-other-task-section" aria-labelledby="project-other-task-heading"><div class="list-heading"><h3 id="project-other-task-heading">単独Task</h3></div><form id="project-other-task-form" class="project-other-task-form"><label for="project-other-task-title" class="visually-hidden">単独Taskのタイトル</label><input id="project-other-task-title" required maxlength="300" placeholder="単独Taskを追加"><label for="project-other-task-status" class="visually-hidden">状態</label><select id="project-other-task-status"><option value="planned">planned</option><option value="next">Next</option></select><button id="project-other-task-submit" class="secondary" data-mutation type="submit">＋ 単独Taskを追加</button></form><label class="project-completed-toggle"><input id="project-other-done-toggle" type="checkbox"> 完了を表示</label><div id="project-other-task-groups"></div></section></section>
+        <section id="project-listing">
+        <form id="project-filters" class="filter-form" aria-label="Projectを絞り込み"><div class="field"><label for="project-filter-q">検索</label><input id="project-filter-q" autocomplete="off"></div><div class="field"><span class="project-filter-label">Area</span><details id="project-filter-area" class="project-filter-multi" data-label="Area"><summary>すべて</summary><div class="project-filter-options"></div></details></div><div class="field"><span class="project-filter-label">Goal</span><details id="project-filter-goal" class="project-filter-multi" data-label="Goal"><summary>すべて</summary><div class="project-filter-options"></div></details></div><div class="field"><span class="project-filter-label">Roadmap Outcome</span><details id="project-filter-outcome" class="project-filter-multi" data-label="Roadmap Outcome"><summary>すべて</summary><div class="project-filter-options"></div></details></div><p class="project-filter-help">同じ項目はどれかに一致、異なる項目はすべて一致します。Goalを選ぶとOutcomeの選択は解除されます。</p><label class="project-inactive-toggle"><input id="project-filter-inactive" type="checkbox"> 保留・中止も表示</label><div class="form-actions"><a class="secondary button-link" href="/projects?level=projects">クリア</a></div></form>
+        <section class="attention-block" aria-labelledby="project-facts-heading"><div class="list-heading"><h2 id="project-facts-heading">次のアクションがない</h2><span id="project-facts-count" class="count-pill"></span></div><ul id="project-facts-list" class="simple-list"></ul></section>
+        <p id="projects-state" class="muted" role="status" aria-live="polite"></p>
+        <div id="project-kanban" class="project-kanban" aria-label="Projectカンバン"></div><ul id="projects-list" class="entity-list" hidden></ul>
+        <details id="project-form-disclosure" class="form-disclosure">
+          <summary>＋ Projectを追加</summary>
+          <form id="project-form" class="form-panel">
+            <div class="field"><label for="project-title">タイトル</label><input id="project-title" required maxlength="300"></div>
+            <div class="field"><label for="project-status">状態</label><select id="project-status"><option>not_started</option><option>doing</option><option>on_hold</option><option>completed</option><option>dropped</option></select></div>
+            <div class="field"><label for="project-goal-id">Goal</label><select id="project-goal-id"><option value="">リンクなし</option></select></div><div class="field"><label for="project-roadmap-outcome-id">Roadmap Outcome</label><select id="project-roadmap-outcome-id"><option value="">リンクなし</option></select></div>
+            <div class="field"><label for="project-area-id">主Area</label><select id="project-area-id"><option value="">リンクなし</option></select></div>
+            <fieldset class="form-grid project-period-fields"><legend>目安期間</legend><div class="field"><label for="project-planned-start-date">開始日</label><input id="project-planned-start-date" type="date"></div><div class="field"><label for="project-planned-end-date">終了日</label><input id="project-planned-end-date" type="date"></div></fieldset>
+            <div class="field"><label for="project-body">本文</label><textarea id="project-body" rows="6"></textarea></div>
+            <div class="form-actions"><button id="cancel-project-edit" class="secondary" type="button" hidden>編集をやめる</button><button id="archive-project" class="secondary" data-mutation type="button" hidden>アーカイブ</button><button id="preview-project" class="primary" data-mutation type="submit">作成</button></div>
+          </form>
+        </details>
+        </section>
+      </div>
+
+      <div id="goals-view" hidden>
+        <p id="goals-state" class="muted" role="status" aria-live="polite"></p>
+        <ul id="goals-list" class="entity-list"></ul>
+        <details id="goal-form-disclosure" class="form-disclosure">
+          <summary>＋ Goalを追加</summary>
+          <form id="goal-form" class="form-panel">
+            <div class="field"><label for="goal-title">タイトル</label><input id="goal-title" required maxlength="300"></div>
+            <div class="field"><label for="goal-status">状態</label><select id="goal-status"><option>active</option><option>on_hold</option><option>achieved</option><option>dropped</option></select></div>
+            <div class="field"><label for="goal-vision-id">Vision</label><select id="goal-vision-id"><option value="">リンクなし</option></select></div><div class="field"><label for="goal-target-date">目標日</label><input id="goal-target-date" type="date"></div>
+            <div class="field"><label for="goal-body">本文</label><textarea id="goal-body" rows="6"></textarea></div>
+            <div class="form-actions"><button id="cancel-goal-edit" class="secondary" type="button" hidden>編集をやめる</button><button id="archive-goal" class="secondary" data-mutation type="button" hidden>アーカイブ</button><button id="preview-goal" class="primary" data-mutation type="submit">作成</button></div>
+          </form>
+        </details>
+      </div>
+      </div>
+      </div>
+    </section>
+
+    <section id="roadmap-workflow" class="screen" aria-labelledby="roadmap-heading" hidden>
+      <div class="page-heading"><div><p class="eyebrow">Roadmap</p><h1 id="roadmap-heading">CycleとOutcome</h1></div><a class="button-link" href="/reviews/weekly?tab=allocation&axis=roadmap_outcome">Outcome配分を見る</a><button id="reload-roadmap" class="visually-hidden" type="button" hidden>再読み込み</button></div>
+      <nav class="tabs roadmap-tabs" aria-label="Roadmap表示"><button id="roadmap-overview-tab" class="secondary" type="button" aria-pressed="true">Roadmap</button><button id="roadmap-edit-tab" class="secondary" type="button" aria-pressed="false">Cycle管理</button></nav>
+      <p id="roadmap-state" class="muted" role="status" aria-live="polite"></p>
+      <section id="roadmap-overview" aria-labelledby="roadmap-overview-heading"><div class="roadmap-overview-heading"><div><p class="eyebrow">Overview</p><h2 id="roadmap-overview-heading">Goal別 年次見通し</h2></div><p class="muted">Goalごとに、到達点と実現手段を年単位で確認します。</p></div><nav class="tabs roadmap-mode-tabs" aria-label="Roadmapの操作モード"><button id="roadmap-browse-tab" class="secondary" type="button" aria-pressed="true">閲覧</button><button id="roadmap-detail-edit-tab" class="secondary" type="button" aria-pressed="false">編集</button></nav><div id="roadmap-direction-strip" class="roadmap-direction-strip" aria-label="PurposeからVisionへの方向"></div><section class="roadmap-year-controls" aria-labelledby="roadmap-area-filter-heading"><div><h3 id="roadmap-area-filter-heading">Areaで絞り込み</h3><div id="roadmap-area-filters" class="roadmap-area-filters" role="group" aria-labelledby="roadmap-area-filter-heading"></div></div><div><h3 id="roadmap-goal-filter-heading">Goalで絞り込み</h3><div id="roadmap-goal-filters" class="roadmap-goal-filters" role="group" aria-labelledby="roadmap-goal-filter-heading"></div></div><div class="roadmap-year-selects"><label for="roadmap-scale-years">年の表示単位</label><select id="roadmap-scale-years"><option value="1">1年</option><option value="5">5年</option></select><label for="roadmap-end-year">終了年</label><select id="roadmap-end-year"></select></div></section><div id="roadmap-board" class="roadmap-board" aria-label="Goal別年次Roadmap"></div></section>
+      <div id="roadmap-edit" hidden>
+      <section class="roadmap-section" aria-labelledby="roadmap-active-heading"><h2 id="roadmap-active-heading">Active Cycle</h2><div id="roadmap-active-cycle"></div><section id="cycle-project-timeline-section" class="cycle-project-timeline" aria-labelledby="cycle-project-timeline-heading"><h3 id="cycle-project-timeline-heading">Projectの目安期間</h3><div id="cycle-project-timeline"></div></section><ul id="roadmap-now-list" class="entity-list"></ul><details id="cycle-close-disclosure" class="form-disclosure"><summary>Cycleを終了</summary><form id="cycle-close-form" class="form-panel"><div class="field"><label for="cycle-close-status">終了状態</label><select id="cycle-close-status"><option value="completed">completed</option><option value="cancelled">cancelled</option></select></div><div id="cycle-close-results" class="form-grid"></div><div class="field"><label for="cycle-close-carryover">Carryover先のplanned Cycle</label><select id="cycle-close-carryover"><option value="">なし</option></select></div><div class="field"><label for="cycle-close-reason">キャンセル理由（cancelled時必須）</label><textarea id="cycle-close-reason" rows="3"></textarea></div><div class="field"><label for="cycle-close-retrospective">振り返り</label><textarea id="cycle-close-retrospective" required rows="5">## 振り返り
+
+## メモ
+</textarea></div><div class="form-actions"><button id="preview-cycle-close" class="primary" data-mutation type="submit">終了内容を確認</button></div></form></details></section>
+      <section class="roadmap-section" aria-labelledby="roadmap-planned-heading"><h2 id="roadmap-planned-heading">Planned Cycle</h2><ul id="roadmap-planned-list" class="entity-list"></ul><details class="form-disclosure"><summary>＋ planned Cycleを追加</summary><form id="cycle-form" class="form-panel"><div class="field"><label for="cycle-title">タイトル</label><input id="cycle-title" required maxlength="300"></div><div class="form-grid"><div class="field"><label for="cycle-start-date">開始日</label><input id="cycle-start-date" type="date" required></div><div class="field"><label for="cycle-end-date">終了日</label><input id="cycle-end-date" type="date" required></div></div><div class="field"><label for="cycle-outcome-ids">Outcome（最大2件）</label><select id="cycle-outcome-ids" multiple size="4"></select></div><div class="field"><label for="cycle-body">振り返り・メモ</label><textarea id="cycle-body" rows="6">## 振り返り
+
+## メモ
+</textarea></div><div class="form-actions"><button id="preview-cycle" class="primary" data-mutation type="submit">作成</button></div></form></details><p class="muted">Active Cycleの構成はここで編集しません。変更が必要な場合は、理由を記録してキャンセルし、新しいCycleを別途作成・開始します。</p></section>
+      <div class="roadmap-lanes" aria-label="Outcomeの順序"><section class="roadmap-section" aria-labelledby="roadmap-next-heading"><h2 id="roadmap-next-heading">Next</h2><ul id="roadmap-next-list" class="entity-list"></ul></section><section class="roadmap-section" aria-labelledby="roadmap-later-heading"><h2 id="roadmap-later-heading">Later</h2><ul id="roadmap-later-list" class="entity-list"></ul></section></div>
+      <section class="roadmap-section" aria-labelledby="roadmap-history-heading"><h2 id="roadmap-history-heading">履歴</h2><ul id="roadmap-history-list" class="entity-list"></ul></section>
+      <section class="roadmap-section" aria-labelledby="roadmap-outcome-heading"><h2 id="roadmap-outcome-heading">Roadmap Outcome</h2><details class="form-disclosure"><summary>＋ Outcomeを追加・編集</summary><form id="roadmap-outcome-form" class="form-panel"><div class="field"><label for="roadmap-outcome-title">タイトル</label><input id="roadmap-outcome-title" required maxlength="300"></div><div class="field"><label for="roadmap-outcome-goal">Goal</label><select id="roadmap-outcome-goal" required></select></div><div class="field"><label for="roadmap-outcome-target-date">到達目安日（任意）</label><input id="roadmap-outcome-target-date" type="date"></div><div id="roadmap-outcome-lane-field" class="field"><label for="roadmap-outcome-lane">追加先</label><select id="roadmap-outcome-lane"><option value="next">Next</option><option value="later">Later</option></select></div><div class="field"><label for="roadmap-outcome-body">成功条件・メモ</label><textarea id="roadmap-outcome-body" rows="6">## 成功条件
+
+## メモ
+</textarea></div><div class="form-actions"><button id="cancel-roadmap-outcome-edit" class="secondary" type="button" hidden>編集をやめる</button><button id="archive-roadmap-outcome" class="secondary" data-mutation type="button" hidden>アーカイブ</button><button id="preview-roadmap-outcome" class="primary" data-mutation type="submit">作成</button></div></form></details></section>
+      </div>
+    </section>
+
+    <section id="review-workflow" class="screen" aria-labelledby="review-heading" hidden>
+      <div class="page-heading"><div><p class="eyebrow">Review</p><h1 id="review-heading">Daily Review</h1></div><button id="reload-reviews" class="visually-hidden" type="button" hidden>再読み込み</button></div>
+      <nav class="tabs" aria-label="Review種別">
+        <a id="weekly-review-tab" href="/reviews/weekly?tab=weekly">Weekly</a>
+        <a id="daily-review-tab" href="/reviews/weekly?tab=daily">Daily</a>
+        <a id="allocation-review-tab" href="/reviews/weekly?tab=allocation">リソース配分</a>
+      </nav>
+      <section id="allocation-workflow" class="allocation-workflow" aria-labelledby="allocation-heading" hidden>
+        <div class="page-heading"><div><p class="eyebrow">Weekly review</p><h2 id="allocation-heading">リソース配分</h2></div></div>
+        <div class="allocation-controls"><fieldset><legend>期間</legend><div id="allocation-period-kind" class="segmented-control" role="group" aria-label="集計期間"><button type="button" data-period-kind="day">日</button><button type="button" data-period-kind="week">週</button><button type="button" data-period-kind="month">月</button><button type="button" data-period-kind="year">年</button></div></fieldset><div class="field allocation-period-control"><label for="allocation-period-start">開始日</label><div><button id="allocation-period-previous" class="secondary" type="button" aria-label="前の期間">‹</button><input id="allocation-period-start" type="date"><button id="allocation-period-next" class="secondary" type="button" aria-label="次の期間">›</button></div></div><fieldset><legend>軸</legend><div id="allocation-axis" class="segmented-control" role="group" aria-label="配分軸"><button type="button" data-axis="area">Area</button><button type="button" data-axis="goal">Goal</button><button type="button" data-axis="roadmap_outcome">Outcome</button></div></fieldset></div>
+        <div id="allocation-summary" class="allocation-summary" aria-live="polite"></div>
+        <div id="allocation-view" class="segmented-control allocation-view" role="group" aria-label="リソース配分の表示"><button type="button" data-allocation-view="comparison">比較</button><button type="button" data-allocation-view="composition">構成</button><button type="button" data-allocation-view="trend">推移</button></div>
+        <section id="allocation-comparison" class="allocation-panel"><h3>目標と実績</h3><div id="allocation-comparison-chart" class="allocation-chart" aria-hidden="true"></div><div class="table-scroll"><table id="allocation-comparison-table"><caption class="visually-hidden">目標と実績の正確な値</caption><thead><tr><th>対象</th><th>目標</th><th>実績</th><th>差分</th></tr></thead><tbody></tbody></table></div></section>
+        <section id="allocation-composition" class="allocation-panel" hidden><h3>配分の偏り</h3><div id="allocation-composition-chart" class="allocation-donuts" aria-hidden="true"></div><div class="table-scroll"><table id="allocation-composition-table"><caption class="visually-hidden">目標と実績の構成比</caption><thead><tr><th>対象</th><th>目標比</th><th>目標時間</th><th>実績比</th><th>実績時間</th></tr></thead><tbody></tbody></table></div></section>
+        <section id="allocation-trend" class="allocation-panel" hidden><h3>期間内のペース</h3><div class="field"><label for="allocation-trend-target">カテゴリ</label><select id="allocation-trend-target"><option value="">全体</option></select></div><div id="allocation-trend-chart" class="allocation-line-chart"></div><div class="table-scroll"><table id="allocation-trend-table"><caption class="visually-hidden">累積目標と実績の正確な値</caption><thead><tr><th>日付</th><th>累積目標</th><th>累積実績</th></tr></thead><tbody></tbody></table></div></section>
+        <details id="allocation-warnings" class="allocation-warnings"><summary>警告</summary><ul id="allocation-warning-list" class="simple-list"></ul></details>
+        <details id="allocation-contributors" class="allocation-contributors"><summary>実績のTask内訳</summary><div id="allocation-contributor-list" class="simple-list"></div><button id="allocation-more-contributors" class="secondary" type="button" hidden>さらに表示</button></details>
+        <details id="allocation-plan" class="allocation-plan"><summary>この期間の計画</summary><form id="allocation-plan-form" class="form-panel"><div class="form-grid"><div class="field"><label for="allocation-input-mode">入力方法</label><select id="allocation-input-mode"><option value="ratio">比率</option><option value="minutes">時間</option></select></div><div class="field"><label for="allocation-total-minutes">合計分</label><input id="allocation-total-minutes" type="number" min="1" inputmode="numeric"></div></div><div id="allocation-plan-targets" class="allocation-plan-targets"></div><div class="form-actions"><button id="allocation-preview-plan" class="primary" data-mutation type="submit">計画を確認</button><button id="allocation-expand-plan" class="secondary" type="button" hidden>他の期間へ一括展開</button><button id="allocation-withdraw-plan" class="secondary" data-mutation type="button" hidden>計画を取り下げ</button></div></form></details>
+      </section>
+      <section id="review-guide" class="review-guide" aria-labelledby="review-guide-heading"><div class="review-guide-heading"><div><p class="eyebrow">Guide</p><h2 id="review-guide-heading">Daily Reviewの進め方</h2></div><a id="review-help-link" class="secondary review-help-link" href="/help/reviews?tab=daily">詳しいやり方</a></div><p id="review-guide-purpose">その日の判断を始める前に、未整理の気がかり、進行中の仕事、7日以内の予定・期限を確認し、今日引き受ける約束を実行可能な量に絞ります。</p><p id="daily-review-progress" class="review-guide-progress" role="status" aria-live="polite" hidden></p><ol id="review-guide-steps" class="review-guide-steps"></ol></section>
+      <section id="progress-review" class="progress-review" aria-labelledby="progress-review-heading"><div class="review-guide-heading"><div><p class="eyebrow">Progress</p><h2 id="progress-review-heading">今日の変化を記録</h2></div><a id="progress-help-link" class="secondary review-help-link" href="/help/reviews?tab=progress">詳しいやり方</a></div><p id="progress-purpose">小さな変化を、あとで使える事実として残します。</p><p class="progress-report-link"><a class="secondary progress-report-link-action" href="/reports/progress">記録をまとめて見る</a></p><form id="progress-form" class="form-panel"><div class="field"><label for="progress-title">今日、何が変わった？</label><input id="progress-title" required maxlength="300" autocomplete="off"></div><div class="field"><label for="progress-occurred-on">日付</label><input id="progress-occurred-on" required type="date"></div><details id="progress-optional-fields"><summary>補足を追加（任意）</summary><div class="progress-optional-content"><div class="field"><label for="progress-origin">紐づけ先（任意）</label><select id="progress-origin"><option value="">未分類</option></select></div><div class="field"><label for="progress-benefit">メリット・学び（任意）</label><textarea id="progress-benefit" rows="3"></textarea></div><div class="field"><label for="progress-evidence">証拠（任意）</label><textarea id="progress-evidence" rows="3"></textarea></div></div></details><details id="progress-writing-guide"><summary>この記録の目的と書き方</summary><dl><div><dt>今日、何が変わった？</dt><dd>前と比べて変わった事実を、一件だけ書きます。</dd></div><div><dt>日付</dt><dd>その変化が起きた日を選びます。</dd></div><div><dt>紐づけ先</dt><dd>どのProject・Goal・Areaの変化か分かる場合に選びます。</dd></div><div><dt>メリット・学び</dt><dd>何が良くなったか、何を学んだかを残します。</dd></div><div><dt>証拠</dt><dd>数値、URL、成果物など、後から確かめられる根拠を残します。</dd></div></dl><p>紐づけ先・メリット／学び・証拠は、今は分からなければ空欄で構いません。事実と日付だけ先に記録し、Weeklyで補えます。</p></details><div class="form-actions"><button id="cancel-progress-edit" class="secondary" type="button" hidden>編集をやめる</button><button id="preview-progress" class="primary" data-mutation type="submit">記録する</button></div></form><p id="progress-state" class="muted" role="status" aria-live="polite"></p><ul id="progress-list" class="entity-list"></ul></section>
+      <details class="review-facts"><summary>過去のReview</summary><ul id="review-facts-list" class="simple-list"></ul><p id="reviews-state" class="muted" role="status" aria-live="polite"></p><ul id="reviews-list" class="entity-list"></ul></details>
+      <details id="review-form-disclosure" class="form-disclosure">
+        <summary>＋ Reviewを記録</summary>
+        <form id="review-form" class="form-panel">
+          <div class="field"><label for="review-title">タイトル</label><input id="review-title" name="title" autocomplete="off" required maxlength="300"></div>
+          <div class="field"><label for="review-period-start">対象日</label><input id="review-period-start" name="period_start" autocomplete="off" type="date" required pattern="\d{4}-\d{2}-\d{2}"></div>
+          <fieldset id="review-checklist" class="review-checklist" hidden><legend>確認した項目</legend><label><input id="review-step-1" name="completed_steps" type="checkbox"> <span id="review-step-1-label"></span></label><label><input id="review-step-2" name="completed_steps" type="checkbox"> <span id="review-step-2-label"></span></label><label><input id="review-step-3" name="completed_steps" type="checkbox"> <span id="review-step-3-label"></span></label><label id="review-step-4-row"><input id="review-step-4" name="completed_steps" type="checkbox"> <span id="review-step-4-label"></span></label></fieldset>
+          <div class="field"><label id="review-body-label" for="review-body">メモ</label><textarea id="review-body" name="notes" autocomplete="off" rows="8"></textarea></div>
+          <p id="review-draft-warning" class="muted" role="status" aria-live="polite" hidden>このブラウザでは下書きを保存できません。画面を離れると入力内容は失われます。</p>
+          <div class="form-actions"><button id="cancel-review-edit" class="secondary" type="button" hidden>編集をやめる</button><button id="archive-review" class="secondary" data-mutation type="button" hidden>アーカイブ</button><button id="preview-review" class="primary" data-mutation type="submit">作成</button></div>
+        </form>
+      </details>
+    </section>
+
+    <section id="progress-report-workflow" class="screen" aria-labelledby="progress-report-heading" hidden><div class="page-heading"><div><p class="eyebrow">Progress</p><h1 id="progress-report-heading">月次実績台帳</h1></div></div><form id="progress-report-form" class="form-panel"><div class="field"><label for="progress-report-month">対象月</label><input id="progress-report-month" type="month" required></div><div class="form-actions"><button class="primary" type="submit">表示</button><button id="copy-progress-report" class="secondary" type="button">Markdownをコピー</button></div></form><p id="progress-report-state" class="muted" role="status" aria-live="polite"></p><textarea id="progress-report-markdown" rows="18" readonly aria-label="月次実績台帳 Markdown"></textarea></section>
+
+    <section id="review-help-workflow" class="screen" aria-labelledby="review-help-heading" hidden><div class="page-heading"><div><p class="eyebrow">Review help</p><h1 id="review-help-heading">Reviewの詳しいやり方</h1></div></div><nav class="review-help-tabs" aria-label="Review guide"><a href="/help/reviews?tab=daily" data-review-help-tab="daily">Daily</a><a href="/help/reviews?tab=weekly" data-review-help-tab="weekly">Weekly</a><a href="/help/reviews?tab=progress" data-review-help-tab="progress">Progress</a></nav><section class="review-guide review-help-guide"><h2 id="review-help-title">Daily Review（5〜10分）</h2><p id="review-help-purpose"></p><img id="review-help-image" hidden alt=""><h3>全体の流れ（テキスト）</h3><ol id="review-help-flow" class="review-help-flow"></ol><h3>詳細手順</h3><ol id="review-help-steps" class="review-help-steps"></ol><section id="review-help-examples"><h3>良い例</h3><p id="review-help-good-example"></p><h3>悪い例</h3><p id="review-help-bad-example"></p><h3>補足</h3><p id="review-help-supplement"></p></section><section><h3>迷った場合</h3><p id="review-help-stuck"></p></section><section><h3>終了条件</h3><p id="review-help-done"></p></section><a id="review-help-back" class="secondary review-help-link" href="/reviews/weekly">Reviewへ戻る</a></section></section>
+
+    <section id="status-workflow" class="screen" aria-labelledby="status-heading" hidden>
+      <div class="page-heading"><div><p class="eyebrow">System</p><h1 id="status-heading">Status</h1></div></div>
+      <p id="service-health" class="muted" role="status" aria-live="polite">読み込み中です。</p>
+      <section class="status-facts" aria-labelledby="status-facts-heading"><h2 id="status-facts-heading">現在の事実</h2><ul id="status-facts-list" class="simple-list"></ul></section>
+      <article hidden class="calendar-sync-card" aria-labelledby="calendar-sync-heading">
+        <div class="calendar-sync-card-heading"><div><p class="eyebrow">Google Calendar</p><h2 id="calendar-sync-heading">Done カレンダー同期</h2></div><p id="calendar-sync-state" class="calendar-sync-state" data-state="waiting">確認中</p></div>
+        <p id="calendar-sync-message" class="calendar-sync-message" role="status" aria-live="polite">同期状態を読み込んでいます。</p>
+        <dl class="calendar-sync-details"><div><dt>理由</dt><dd id="calendar-sync-reason">確認中</dd></div><div><dt>確認日時</dt><dd id="calendar-sync-checked-at">—</dd></div></dl>
+      </article>
+    </section>
+
+    <section id="unavailable-route" class="screen" aria-labelledby="unavailable-heading" hidden><h1 id="unavailable-heading">この画面は現在利用できません</h1></section>
+  </main>
+  <div id="roadmap-detail-backdrop" class="roadmap-detail-backdrop" hidden></div><section id="roadmap-outcome-detail" class="roadmap-outcome-detail" role="dialog" aria-modal="true" aria-labelledby="roadmap-outcome-detail-heading" aria-live="polite" hidden><div id="roadmap-detail-handle" class="roadmap-detail-handle" aria-label="詳細シートの幅または高さを変更"></div><div class="roadmap-detail-heading"><h3 id="roadmap-outcome-detail-heading" tabindex="-1">Outcome詳細</h3><button id="roadmap-detail-close" class="secondary" type="button">閉じる</button></div><div id="roadmap-outcome-detail-content"></div></section>
+
+  <nav id="mobile-navigation" class="mobile-navigation" aria-label="モバイルの主な画面">
+    <a data-primary-nav href="/tasks"><svg class="mobile-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8"></circle><path d="m12 7-3 5h3l-1 5 4-6h-3z"></path></svg><span class="mobile-nav-label">Focus</span></a>
+    <a data-primary-nav href="/inbox"><span class="mobile-nav-icon-with-count"><svg class="mobile-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><path d="M4 6h16v12H4z"></path><path d="m4 7 8 6 8-6"></path></svg><span id="inbox-count-mobile" class="nav-count" hidden></span></span><span class="mobile-nav-label">Inbox</span></a>
+    <button id="open-capture-mobile" class="mobile-capture" type="button" aria-label="Captureを開く"><span class="mobile-capture-circle" aria-hidden="true">＋</span><span class="mobile-nav-label">Capture</span></button>
+    <a data-primary-nav href="/projects"><svg class="mobile-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8"></circle><path d="m15 9-2 4-4 2 2-4z"></path></svg><span class="mobile-nav-label">方向性</span></a>
+    <a data-primary-nav href="/reviews/weekly"><svg class="mobile-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><path d="M7 3h8l3 3v15H7z"></path><path d="M15 3v4h4M10 13l2 2 4-4"></path></svg><span class="mobile-nav-label">Review</span></a>
+  </nav>
+
+  <dialog id="capture-dialog" aria-labelledby="capture-heading">
+    <div class="dialog-card">
+      <div class="dialog-heading"><p class="eyebrow">Capture</p><h2 id="capture-heading">Inboxへ追加</h2></div>
+      <form id="capture-form">
+        <div class="field"><label for="capture-title">タイトル</label><input id="capture-title" name="title" type="text" required autocomplete="off" maxlength="300"></div>
+        <div class="field"><label for="capture-body">メモ（任意）</label><textarea id="capture-body" name="body" rows="5"></textarea></div>
+        <div class="dialog-actions"><button id="cancel-capture" class="secondary" type="button">閉じる</button><button id="preview-capture" class="primary" data-mutation type="submit">Inboxに保存</button></div>
+      </form>
+    </div>
+  </dialog>
+  <dialog id="preview-dialog" aria-labelledby="preview-title"><div class="dialog-card"><div class="dialog-heading"><p class="eyebrow">確認</p><h2 id="preview-title">保存する内容</h2></div><div id="preview-content" class="preview-content"></div><div class="dialog-actions"><button id="cancel-preview" class="secondary" type="button">キャンセル</button><button id="confirm-preview" class="primary" type="button">この内容で保存</button></div></div></dialog>
+  <dialog id="allocation-expand-selector-dialog" class="allocation-expand-dialog" aria-labelledby="allocation-expand-selector-title" aria-describedby="allocation-expand-source-label"><div class="dialog-card"><div class="dialog-heading"><p class="eyebrow">リソース配分</p><h2 id="allocation-expand-selector-title">他の期間へ一括展開</h2></div><p id="allocation-expand-source-label" class="muted"></p><div id="allocation-expand-kind-list" class="allocation-expand-kind-list"></div><p id="allocation-expand-selected-count" aria-live="polite"></p><div class="dialog-actions allocation-expand-actions"><button id="allocation-expand-cancel" class="secondary" type="button">キャンセル</button><button id="allocation-expand-submit" class="primary" type="button" disabled>選択した期間へ保存</button></div></div></dialog>
+  <dialog id="allocation-expand-overwrite-dialog" class="allocation-expand-dialog" aria-labelledby="allocation-expand-overwrite-title" aria-describedby="allocation-expand-overwrite-summary"><div class="dialog-card"><div class="dialog-heading"><p class="eyebrow">リソース配分</p><h2 id="allocation-expand-overwrite-title">設定済みの計画を上書きしますか？</h2></div><p id="allocation-expand-overwrite-summary" aria-live="polite"></p><ul id="allocation-expand-overwrite-list" class="allocation-expand-overwrite-list"></ul><div class="dialog-actions allocation-expand-actions"><button id="allocation-expand-overwrite-cancel" class="secondary" type="button">キャンセル</button><button id="allocation-expand-overwrite-submit" class="primary" type="button">上書きして保存</button></div></div></dialog>
+  <p id="allocation-expand-result" class="visually-hidden" aria-live="polite"></p>
+  <dialog id="work-session-edit-dialog" aria-labelledby="work-session-edit-title"><div class="dialog-card"><div class="dialog-heading"><p class="eyebrow">Focus</p><h2 id="work-session-edit-title">実績時刻を編集</h2></div><form id="work-session-edit-form"><div class="form-grid work-session-edit-fields"><div class="field"><label for="work-session-edit-start">開始日時</label><input id="work-session-edit-start" type="datetime-local" step="1" required aria-describedby="work-session-edit-start-error"><p id="work-session-edit-start-error" class="field-error" role="alert" hidden></p></div><div class="field"><label for="work-session-edit-end">終了日時</label><input id="work-session-edit-end" type="datetime-local" step="1" required aria-describedby="work-session-edit-end-error"><p id="work-session-edit-end-error" class="field-error" role="alert" hidden></p></div></div><p class="muted">未来の時刻は保存できません。</p><div class="dialog-actions"><button id="work-session-edit-cancel" class="secondary" type="button">キャンセル</button><button id="work-session-edit-preview" class="primary" data-mutation type="submit">保存</button></div></form></div></dialog>
+  <dialog id="task-switch-dialog" aria-labelledby="task-switch-title" aria-describedby="task-switch-message"><div class="dialog-card"><div class="dialog-heading"><p class="eyebrow">Task切替</p><h2 id="task-switch-title">実行中のTaskがあります</h2></div><p id="task-switch-message"></p><div id="task-switch-end-field" class="field"><label for="task-switch-end">現在のTaskの終了日時（JST）</label><input id="task-switch-end" type="datetime-local" step="1" required aria-describedby="task-switch-end-error"><p id="task-switch-end-error" class="field-error" role="alert" hidden></p></div><p id="task-switch-time-note" class="muted" hidden></p><div class="dialog-actions task-switch-actions"><button id="switch-interrupt" class="primary" type="button">中断して切替</button><button id="switch-complete" class="secondary" type="button">完了して切替</button><button id="cancel-task-switch" class="secondary" type="button">キャンセル</button></div></div></dialog>
+  <dialog id="notification-pause-dialog" aria-labelledby="notification-pause-title"><div class="dialog-card"><div class="dialog-heading"><p class="eyebrow">Focus通知</p><h2 id="notification-pause-title">通知を一時停止</h2></div><p id="notification-pause-deadline" class="muted" role="status" aria-live="polite"></p><div class="field"><label for="notification-pause-minutes">停止時間（分）</label><input id="notification-pause-minutes" name="minutes" type="number" min="1" max="1440" value="30" autocomplete="off" inputmode="numeric" required></div><div class="dialog-actions"><button id="notification-pause-preset-15" class="secondary" type="button">15分</button><button id="notification-pause-preset-30" class="secondary" type="button">30分</button><button id="notification-pause-preset-60" class="secondary" type="button">60分</button></div><div class="dialog-actions"><button id="notification-pause-close" class="secondary" type="button">閉じる</button><button id="notification-pause-resume" class="secondary" data-mutation type="button" hidden>通知を再開</button><button id="notification-pause-save" class="primary" data-mutation type="button">設定</button></div></div></dialog>
+  <dialog id="focus-move-dialog" aria-labelledby="focus-move-title"><div class="dialog-card"><div class="dialog-heading"><p class="eyebrow">対応予定日</p><h2 id="focus-move-title">Taskを移動</h2></div><div class="dialog-actions focus-move-options"><button id="focus-move-today" class="secondary" type="button">今日やる</button><button id="focus-move-dated" class="secondary" type="button">予定日あり</button><button id="focus-move-undated" class="secondary" type="button">予定日なし</button></div><div id="focus-move-date-field" class="field" hidden><label for="focus-move-date">対応予定日</label><input id="focus-move-date" type="date" autocomplete="off"><button id="focus-move-save" class="primary" data-mutation type="button">この日に移動</button></div><div class="dialog-actions"><button id="focus-move-cancel" class="secondary" type="button">キャンセル</button></div></div></dialog>
+  <dialog id="focus-due-dialog" aria-labelledby="focus-due-title"><div class="dialog-card"><div class="dialog-heading"><p class="eyebrow">期限</p><h2 id="focus-due-title">期限を設定</h2></div><div class="field"><label for="focus-due-date">期限</label><input id="focus-due-date" type="date" autocomplete="off"></div><div class="dialog-actions"><button id="focus-due-save" class="primary" data-mutation type="button">保存</button><button id="focus-due-clear" class="secondary" data-mutation type="button">期限を外す</button><button id="focus-due-cancel" class="secondary" type="button">キャンセル</button></div></div></dialog>
+  <dialog id="value-lantern-dialog" class="value-lantern-dialog" aria-labelledby="value-lantern-dialog-title" aria-describedby="value-lantern-dialog-copy"><div class="dialog-card value-lantern-dialog-card"><div class="dialog-heading"><p class="eyebrow">Direction</p><h2 id="value-lantern-dialog-title">Value Lantern</h2></div><p id="value-lantern-dialog-copy" class="muted">図解の内容は、方向性画面の本文にもテキストで記載しています。</p><button id="value-lantern-close" class="secondary" type="button">閉じる</button><img src="/assets/local-background.svg" width="941" height="1672" alt=""></div></dialog>
+  <script src="/assets/project-kanban-motion.js"></script>
+  <script src="/assets/task-card.js"></script>
+  <script src="/assets/project-task-board.js"></script>
+  <script src="/assets/allocation-ui.js"></script>
+  <script src="/assets/quick-start-suggestions.js"></script>
+  <script src="/assets/focus-pip.js"></script>
+  <script src="/assets/progress.js"></script>
+  <script src="/assets/task-settings.js"></script>
+  <script src="/assets/task-panel-editor.js"></script>
+  <script src="/assets/review-help-data.js"></script>
+  <script src="/assets/unsaved-navigation-guard.js"></script>
+  <script src="/assets/cycle-focus-context.js"></script>
+  <script src="/assets/roadmap-cycle-ui.js"></script>
+  <script src="/assets/archived-task-detail.js"></script>
+  <script src="/assets/focus-completed.js"></script>
+  <script src="/assets/app.js"></script>
+  <script src="/assets/task-search.js"></script>
+  <script src="/assets/markdown-preview.js"></script>
+
+<script src="/assets/local-calendar.js" defer></script>
+<script src="/assets/local-notifications.js" defer></script>
+</body>
+</html>

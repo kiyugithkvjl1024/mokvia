@@ -1,0 +1,26 @@
+name: gtd-local
+services:
+  app:
+    build: .
+    ports:
+      - "127.0.0.1:24873:24873"
+    volumes:
+      - gtd_data:/data
+    environment:
+      GTD_DATA_ROOT: /data
+    restart: "no"
+    stop_grace_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:24873/api/v1/health', timeout=2).read()"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+volumes:
+  gtd_data:

@@ -1,0 +1,16 @@
+const assert = require('node:assert/strict');
+const calendar = require('../webapp/static/local-calendar.js');
+assert.equal(calendar.shiftDate('2026-11-30', 'month', 1), '2026-12-30');
+assert.equal(calendar.shiftDate('2026-01-31', 'month', 1), '2026-02-28');
+assert.equal(calendar.shiftDate('2026-11-04', 'week', -1), '2026-10-28');
+const planned = calendar.scheduleOperation(null, {title:'Example',date:'2026-11-04',timed:true,start:'09:00',endDate:'2026-11-04',end:'10:00'});
+assert.equal(planned.fields.scheduled_start, '2026-11-04T09:00:00+09:00');
+assert.equal(planned.fields.status, 'scheduled');
+const old = {id:'sample',content_hash:'hash',frontmatter:{status:'scheduled'}};
+const moved = calendar.scheduleOperation(old, {title:'Example',date:'2026-11-05',timed:false});
+assert.equal(moved.base_hash,'hash');
+assert.equal(moved.fields.status,'next');
+assert.equal(moved.fields.scheduled_start,'');
+assert.throws(()=>calendar.scheduleOperation(null,{title:'Example',date:'2026-11-04',timed:true,start:'10:00',endDate:'2026-11-04',end:'09:00'}));
+assert.throws(()=>calendar.scheduleOperation({...old,frontmatter:{status:'doing'}},{title:'Example',date:'2026-11-05',timed:false}));
+console.log('Local calendar date and mutation tests passed');

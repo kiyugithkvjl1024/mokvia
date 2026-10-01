@@ -1,0 +1,25 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.env
+*.tar
+*.zip
+output/
+.local-state/
+.webapp.lock
+.webapp-mutation-state
+# Canonical company data must never live in the source checkout.
+inbox/
+tasks/
+projects/
+goals/
+purposes/
+visions/
+areas/
+roadmap-outcomes/
+cycles/
+time-allocation-plans/
+progress/
+reviews/
+archive/
+private/

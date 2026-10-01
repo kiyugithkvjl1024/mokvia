@@ -1,0 +1,57 @@
+"use strict";
+
+window.ReviewHelp = Object.freeze({
+  daily: {
+    title: "Daily Review（5〜10分）",
+    purpose: "その日の判断を始める前に、未整理の気がかり、進行中の仕事、7日以内の予定・期限を確認し、今日引き受ける約束を実行可能な量に絞ります。",
+    alt: "Inbox確認からDaily Reviewを記録するまでの5段階の流れ",
+    flow: ["Inbox確認", "Doing・7日内を確認", "今日やる／やらないを判断", "今日の約束を確定", "Daily Reviewを記録"],
+    steps: [
+      {label: "Inbox確認", purpose: "未整理の気がかりを見落とさないため。", action: "Inboxを見渡し、今日判断が必要なものと、後で明確化するものを分けます。"},
+      {label: "Doing・7日内を確認", purpose: "進行中の仕事と直近の日付項目の衝突を先に見つけるため。", action: "Doing、Scheduled、dueを見て、今日対応しないと困るものを特定します。"},
+      {label: "今日やる／やらないを判断", purpose: "候補を全部抱えず、今日の容量に収めるため。", action: "各候補を今日やるか今日はやらないかに分け、曖昧な保留を減らします。"},
+      {label: "今日の約束を確定", purpose: "希望ではなく、実行可能な約束として固定するため。", action: "所要時間と予定を見比べ、今日やるものだけをNotesへ記録します。"},
+      {label: "Daily Reviewを記録", purpose: "判断結果を残し、翌日の見直しにつなげるため。", action: "確認状態とNotesを見直し、Daily Reviewを保存して保存完了を確認します。"},
+    ],
+    example: ["期限が近い資料を今日やる。", "できるだけ頑張る。", "今日やらない候補は、Notesへ残します。"],
+    stuck: "判断できないInboxは、次に誰へ何を確認するかだけ決めて残します。",
+    done: "InboxとDoing・7日内を確認し、実行可能な今日の約束をNotesへ確定して、Daily Reviewの保存完了を確認できた。",
+    back: "/reviews/weekly",
+  },
+  weekly: {
+    title: "Weekly Review（30〜45分）",
+    purpose: "約束・Project・Goalの全体を信頼できる状態に戻します。",
+    alt: "ClearからWeekly Reviewを記録するまでの6段階の流れ",
+    flow: ["Clear", "Current", "Creative", "Goal整合", "必要な変更を反映", "Weekly Reviewを記録"],
+    steps: [
+      {label: "Clear", purpose: "未整理の気がかりを信頼できる一覧へ戻すため。", action: "Inboxを確認し、捨てるもの、次の判断が必要なもの、予定へ置くものを分けます。"},
+      {label: "Current", purpose: "現在の約束と滞留を現実に合わせるため。", action: "Next、Doing、Waiting、Scheduled、Somedayを確認し、止まったものや期限を見直します。"},
+      {label: "Creative", purpose: "Active Projectを次の物理的行動へ接続するため。", action: "NextがないProjectとSomedayを見て、必要な次の行動や再開条件を決めます。"},
+      {label: "Goal整合", purpose: "今週の行動が大事な方向から外れていないか確かめるため。", action: "PurposeとActive Goalを見て、続ける約束と見直す約束を決めます。"},
+      {label: "必要な変更を反映", purpose: "気づきをメモだけで終わらせず、GTDを信頼できる状態にするため。", action: "決めたTask、Project、日付、紐づけの変更を該当画面で反映し、結果を確認します。"},
+      {label: "Weekly Reviewを記録", purpose: "判断と変更の結果を次週へ引き継ぐため。", action: "確認状態とNotesを見直し、Weekly Reviewを保存して保存完了を確認します。"},
+    ],
+    example: ["NextのないProjectに一つの物理的行動を置く。", "Project名だけを『進める』にする。", "Waitingは相手と次の確認日を残せば十分です。"],
+    stuck: "全てを直そうとせず、今週の信頼を落とす一件から変更します。",
+    done: "Clear、Current、Creative、Goal整合を確認し、必要な変更を反映して、Weekly Reviewの保存完了を確認できた。",
+    back: "/reviews/weekly?tab=weekly",
+  },
+  progress: {
+    title: "Progressの詳しいやり方", image: "/assets/progress.png", size: [1536, 1024],
+    alt: "人が小さな変化を記録し、Weeklyで意味・紐づけ・証拠を補完してGTDへ蓄積する。GTDは月次実績台帳Markdownへ整形し、人が用途別に選択・言い換えて、実績報告・職務経歴書・面接・ライフプランへ分岐する流れ。",
+    flow: ["人が小さな変化を記録する", "GTDが原子的な事実として蓄積する", "Weeklyで意味・紐づけ・証拠を補完し、蓄積へ戻す", "GTDが月次実績台帳Markdownへ整形する", "人が用途別に選択・言い換える", "実績報告・職務経歴書・面接・ライフプランへ分岐する"],
+    steps: [
+      {label: "小さな変化を記録", purpose: "後で思い出そうとせず、気づいた変化を事実として残すため。", action: "変化に気づいた日、またはその日を振り返るときに、前と比べて変わったことを一文で書き、発生日を選びます。"},
+      {label: "原子的な事実として蓄積", purpose: "用途が変わっても組み替えられる材料にするため。", action: "記録するたびに、一つの記録には一つの変化だけを書きます。複数の変化があれば、記録を分けます。"},
+      {label: "Weeklyで補完", purpose: "記録時に分からなかった意味や背景を、振り返ってから補うため。", action: "週ごとのWeekly Reviewを行うときに、その週のProgressを見ます。紐づけ先、メリット・学び、証拠は必要な記録だけ補います。毎件を埋める必要はありません。"},
+      {label: "月次実績台帳へ整形", purpose: "散らばった事実を月単位で見渡すため。", action: "月末の振り返りや報告の準備をするときに、月次実績台帳Markdownを表示し、候補を一覧で確認します。"},
+      {label: "人が用途別に選択・言い換え", purpose: "同じ事実を相手と目的に合う説明へ変えるため。", action: "実績を伝える必要があるときに、使う記録だけを選び、誇張せず伝わる表現に整えます。"},
+      {label: "報告や転職活動へ利用", purpose: "事実と証拠に基づく説明をいつでも作れるようにするため。", action: "実績報告、職務経歴書、面接、ライフプランを準備するときに、必要な記録を必要な形で使います。"},
+    ],
+    example: ["問い合わせテンプレートを更新した。必要なら「返信時の迷いが減った」「更新後のテンプレートURL」を補足する。", "仕事を頑張った。", "メリット・学びは良くなった点や次回に使う気づき、証拠はURL・数値・成果物など後から確かめられる根拠です。どちらも記録時に不明なら空欄で、Weekly Reviewで必要なものだけ補います。"],
+    stuck: "大きく書こうとせず、一日の変化を一文に分けます。意味や用途は、週ごとのWeekly Reviewで必要なものから補えます。",
+    done: "一つの変化を日付付きの事実として記録し、任意の補足を無理に埋めていない。Weekly Reviewでは必要な記録だけを補えている。",
+    purpose: "小さな変化を、あとから説明できる原子的な事実として残します。記録時に分からない意味・紐づけ・証拠は、Weekly Reviewで振り返ってから補えます。",
+    back: "/reviews/weekly",
+  },
+});
