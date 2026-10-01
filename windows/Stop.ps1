@@ -10,4 +10,4 @@ try {
     else { throw 'Notification helper did not stop within 15 seconds. Wait before restarting.' }
 } finally { $probe.Dispose() }
 Invoke-Compose -Arguments @('stop', 'app') | Out-Host
-Write-Host 'GTD stopped. The data volume is retained.'
+Write-Host 'mokvia stopped. The data volume is retained.'

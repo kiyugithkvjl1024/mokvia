@@ -1,6 +1,6 @@
-# GTD Local
+# mokvia
 
-会社Windowsのlocalhostで動く、Markdownベースの個人GTDアプリです。Docker Linuxコンテナ、Python標準ライブラリ、vanilla JavaScriptを使用します。実行時の外部API・AIモデル・クラウド保存は不要です。
+mokviaは、タスクの収集・整理・見直しを支える個人向けタスク管理アプリです。会社Windowsのlocalhostで動作し、データはMarkdownで保存します。Docker Linuxコンテナ、Python標準ライブラリ、vanilla JavaScriptを使用します。実行時の外部API・AIモデル・クラウド保存は不要です。
 
 [Windows導入手順](docs/SETUP-WINDOWS.md)を読み、会社が許可したDocker/PowerShell環境でZIPを展開して起動します。
 

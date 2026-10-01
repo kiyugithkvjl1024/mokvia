@@ -19,7 +19,7 @@
         const event=await response.json();const notify=shouldNotify(event,last,root.Notification?.permission);
         if(event.id){last=event.id;try{localStorage.setItem('gtd-local-notification-id',last);}catch(_){}}
         state.textContent=event.native_active?'Windows通知が稼働中':'ブラウザ通知：タブを開いておいてください';
-        if(notify)new Notification('GTD Local',{body:event.text,tag:'gtd-local-current'});
+        if(notify)new Notification('mokvia',{body:event.text,tag:'gtd-local-current'});
       }catch(_){state.textContent='通知監視に接続できません';}finally{busy=false;}
     }
     setInterval(poll,10000);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')poll();});poll();

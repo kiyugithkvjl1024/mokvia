@@ -38,7 +38,7 @@ def runtime_claim(root: Path):
     fd=os.open(path,os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW,0o600)
     try:
         try: fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
-        except BlockingIOError: raise RuntimeError('GTD already running; refusing duplicate startup')
+        except BlockingIOError: raise RuntimeError('mokvia already running; refusing duplicate startup')
         yield
     finally: os.close(fd)
 
@@ -187,7 +187,7 @@ def serve(root: Path,*,container=False):
         def stop(*_):
             stopped.set(); threading.Thread(target=server.shutdown,daemon=True).start()
         signal.signal(signal.SIGTERM,stop)
-        print('Local GTD ready at http://localhost:24873',flush=True)
+        print('mokvia ready at http://localhost:24873',flush=True)
         try: server.serve_forever()
         except KeyboardInterrupt: pass
         finally: stopped.set(); thread.join(timeout=15); server.server_close()
@@ -204,6 +204,6 @@ def main():
         elif args.command=='backup': backup(DATA_ROOT,args.output)
         else: print('Pre-restore backup:',restore(DATA_ROOT,args.input))
     except Exception as error:
-        print('Local GTD operation failed:',type(error).__name__,flush=True); return 1
+        print('mokvia operation failed:',type(error).__name__,flush=True); return 1
     return 0
 if __name__=='__main__': raise SystemExit(main())

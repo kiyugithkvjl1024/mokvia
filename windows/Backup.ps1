@@ -16,7 +16,7 @@ try {
     Invoke-Docker -Arguments @('cp', ($name + ':' + $staged), $target) | Out-Host
     if (-not (Test-Path -LiteralPath $target) -or (Get-Item -LiteralPath $target).Length -eq 0) { throw 'Backup archive was not created.' }
     Write-Host "Backup saved: $target"
-    Write-Host 'GTD remains stopped. Use Start.ps1 when ready.'
+    Write-Host 'mokvia remains stopped. Use Start.ps1 when ready.'
 } finally {
     Invoke-Docker -Arguments @('exec', $name, 'python3', '-c', 'import pathlib,sys; pathlib.Path(sys.argv[1]).unlink(missing_ok=True)', $staged) | Out-Null
     Invoke-Docker -Arguments @('rm', '-f', $name) | Out-Null

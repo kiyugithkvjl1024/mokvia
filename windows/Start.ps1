@@ -13,11 +13,11 @@ for ($attempt = 0; $attempt -lt 60; $attempt++) {
         }
     } catch { Start-Sleep -Seconds 1 }
 }
-if (-not $ready) { throw 'GTD did not become healthy. Inspect docker compose logs; no unrelated process was stopped.' }
+if (-not $ready) { throw 'mokvia did not become healthy. Inspect docker compose logs; no unrelated process was stopped.' }
 # A helper blocked by policy produces no heartbeat: the open browser takes over.
 $notifyScript = Join-Path $PSScriptRoot 'Notify.ps1'
 try {
     Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoProfile', '-WindowStyle', 'Hidden', '-File', ('"' + $notifyScript + '"')) -ErrorAction Stop | Out-Null
 } catch { Write-Warning 'Native notification helper could not start. Use the open browser notification fallback.' }
 Start-Process $script:BaseUrl
-Write-Host 'GTD is ready. Allow browser notifications when prompted. Keep the tab open if native notifications are unavailable.'
+Write-Host 'mokvia is ready. Allow browser notifications when prompted. Keep the tab open if native notifications are unavailable.'

@@ -1,4 +1,4 @@
-# GTD Local Data Schema
+# mokvia Data Schema
 
 ## Storage contract
 

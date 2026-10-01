@@ -1,6 +1,6 @@
-# GTD Local repository instructions
+# mokvia repository instructions
 
-This is a clean distribution of a local GTD application. Read docs/SETUP-WINDOWS.md and docs/COPILOT.md before setup. The canonical terminology and entity contracts are CONTEXT.md and docs/data-schema.md.
+This is a clean distribution of the local mokvia application. Read docs/SETUP-WINDOWS.md and docs/COPILOT.md before setup. The canonical terminology and entity contracts are CONTEXT.md and docs/data-schema.md.
 
 - Run on approved Windows Docker Linux containers with Compose project `gtd-local`, service `app`, port `127.0.0.1:24873`, named volume `gtd-local_gtd_data` mounted at `/data`.
 - Node.js installation on the Windows host is not required. No external hosting, home PC connection, Tailscale, Google Calendar sync, automatic Git commit/push, or required paid service.

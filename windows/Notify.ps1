@@ -11,7 +11,7 @@ try {
     Add-Type -AssemblyName System.Drawing
     $icon = New-Object System.Windows.Forms.NotifyIcon
     $icon.Icon = [System.Drawing.SystemIcons]::Information
-    $icon.Text = 'GTD Local'
+    $icon.Text = 'mokvia'
     $icon.Visible = $true
     $lastId = ''
     if (Test-Path -LiteralPath $idFile) { $lastId = (Get-Content -LiteralPath $idFile -Raw).Trim() }
@@ -24,7 +24,7 @@ try {
                 # Persist before display: unknown display result must not trigger a burst.
                 $lastId = [string]$notice.id
                 Set-Content -LiteralPath $idFile -Value $lastId -Encoding UTF8
-                $icon.ShowBalloonTip(10000, 'GTD Local', [string]$notice.text, [System.Windows.Forms.ToolTipIcon]::Info)
+                $icon.ShowBalloonTip(10000, 'mokvia', [string]$notice.text, [System.Windows.Forms.ToolTipIcon]::Info)
             }
         } catch {
             # No heartbeat while server is unavailable; browser fallback can recover.

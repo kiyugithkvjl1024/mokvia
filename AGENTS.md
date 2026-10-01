@@ -1,4 +1,4 @@
-# Local GTD distribution
+# mokvia distribution
 
 This is application source, not a task-data repository. Company data stays outside this checkout in the local Docker volume; backups stay in a company-approved local directory. Never stage, commit, push, attach, or copy real task data, notification state, backups, credentials, logs, or conversations into this repository.
 

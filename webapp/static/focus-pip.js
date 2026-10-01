@@ -16,7 +16,7 @@ window.FocusPiP = (() => {
     function place(node) { if (!node || !node.parentNode) return; const marker = document.createElement("span"); marker.hidden = true; marker.className = "focus-pip-placeholder"; node.parentNode.insertBefore(marker, node); moved.push({node, marker, hidden: node.hidden}); pipWindow.document.body.append(node); }
     function restore() { for (const item of moved.splice(0).reverse()) { item.node.hidden = item.hidden; if (item.marker.parentNode) item.marker.parentNode.insertBefore(item.node, item.marker); if (item.marker.parentNode) item.marker.parentNode.removeChild(item.marker); } if (typeof onDocumentChange === "function") onDocumentChange(document); }
     function renderShell() {
-      const doc = pipWindow.document; doc.title = "GTD Focus"; doc.body.dataset.focusPipWindow = "true"; doc.body.dataset.focusPipSize = size;
+      const doc = pipWindow.document; doc.title = "mokvia Focus"; doc.body.dataset.focusPipWindow = "true"; doc.body.dataset.focusPipSize = size;
       const stylesheet = doc.createElement("link"); stylesheet.rel = "stylesheet"; stylesheet.href = "/assets/app.css"; doc.head.append(stylesheet);
       const toolbar = doc.createElement("div"), title = doc.createElement("strong"), opener = doc.createElement("button"); toolbar.className = "focus-pip-toolbar"; title.textContent = "Focus"; opener.type = "button"; opener.className = "secondary"; opener.textContent = "元画面"; opener.addEventListener("click", () => { if (typeof window.focus === "function") window.focus(); });
       const settings = doc.createElement("details"), summary = doc.createElement("summary"), panel = doc.createElement("div"), label = doc.createElement("label"), select = doc.createElement("select"), note = doc.createElement("p");

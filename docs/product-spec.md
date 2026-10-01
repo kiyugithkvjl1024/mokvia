@@ -1,6 +1,6 @@
-# GTD Local 製品仕様
+# mokvia 製品仕様
 
-会社PC内のDocker Linuxコンテナとブラウザで完結するMarkdownベースのGTDです。アプリ実行中の外部API、AIモデル、クラウド保存、外部カレンダー同期はありません。会社承認済みCopilotは手動補助として利用します。
+会社PC内のDocker Linuxコンテナとブラウザで完結するMarkdownベースのmokviaです。アプリ実行中の外部API、AIモデル、クラウド保存、外部カレンダー同期はありません。会社承認済みCopilotは手動補助として利用します。
 
 ## 保持する機能
 

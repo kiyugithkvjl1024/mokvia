@@ -1,4 +1,4 @@
-# ローカルGTD 配布仕様
+# mokvia 配布仕様
 
 承認済みの目的: Windows会社PCだけで既存GTDの主要操作を利用する。Docker上のLinux/Python、localhost Web UI、Markdown正本を維持する。会社PCのNode導入は不要。
 

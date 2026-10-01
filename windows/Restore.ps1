@@ -14,7 +14,7 @@ try {
     Invoke-Docker -Arguments @('exec', '--user', '0', $name, 'chown', '10001:10001', $staged) | Out-Null
     Invoke-Docker -Arguments @('exec', '--user', '0', $name, 'chmod', '600', $staged) | Out-Null
     Invoke-Docker -Arguments @('exec', $name, 'python3', '-m', 'local_runtime', 'restore', '--input', $staged) | Out-Host
-    Write-Host 'Restore validated and completed. GTD remains stopped. Start and verify records before continuing.'
+    Write-Host 'Restore validated and completed. mokvia remains stopped. Start and verify records before continuing.'
 } finally {
     Invoke-Docker -Arguments @('exec', $name, 'python3', '-c', 'import pathlib,sys; pathlib.Path(sys.argv[1]).unlink(missing_ok=True)', $staged) | Out-Null
     Invoke-Docker -Arguments @('rm', '-f', $name) | Out-Null

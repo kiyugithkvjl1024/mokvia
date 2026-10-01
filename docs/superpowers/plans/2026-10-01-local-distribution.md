@@ -1,8 +1,8 @@
-# Local GTD Implementation Plan
+# mokvia Implementation Plan
 
 > For agentic workers: use native execution with isolated file ownership.
 
-**Goal:** Ship an independent clean Windows Docker GTD distribution with local calendar and notifications.
+**Goal:** Ship an independent clean Windows Docker mokvia distribution with local calendar and notifications.
 **Architecture:** Retain the existing standard-library Python Store/API and vanilla JS UI. Add a local runtime and Windows display helper; use a Linux data volume.
 **Tech Stack:** Python standard library, Docker Compose, Windows PowerShell, vanilla JavaScript.
 **Spec:** ../specs/2026-10-01-local-distribution.md

@@ -1,4 +1,4 @@
-# GTD Local Web/API仕様
+# mokvia Web/API仕様
 
 ## 境界
 

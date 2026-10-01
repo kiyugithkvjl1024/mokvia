@@ -28,7 +28,7 @@ window.ReviewHelp = Object.freeze({
       {label: "Current", purpose: "現在の約束と滞留を現実に合わせるため。", action: "Next、Doing、Waiting、Scheduled、Somedayを確認し、止まったものや期限を見直します。"},
       {label: "Creative", purpose: "Active Projectを次の物理的行動へ接続するため。", action: "NextがないProjectとSomedayを見て、必要な次の行動や再開条件を決めます。"},
       {label: "Goal整合", purpose: "今週の行動が大事な方向から外れていないか確かめるため。", action: "PurposeとActive Goalを見て、続ける約束と見直す約束を決めます。"},
-      {label: "必要な変更を反映", purpose: "気づきをメモだけで終わらせず、GTDを信頼できる状態にするため。", action: "決めたTask、Project、日付、紐づけの変更を該当画面で反映し、結果を確認します。"},
+      {label: "必要な変更を反映", purpose: "気づきをメモだけで終わらせず、mokviaを信頼できる状態にするため。", action: "決めたTask、Project、日付、紐づけの変更を該当画面で反映し、結果を確認します。"},
       {label: "Weekly Reviewを記録", purpose: "判断と変更の結果を次週へ引き継ぐため。", action: "確認状態とNotesを見直し、Weekly Reviewを保存して保存完了を確認します。"},
     ],
     example: ["NextのないProjectに一つの物理的行動を置く。", "Project名だけを『進める』にする。", "Waitingは相手と次の確認日を残せば十分です。"],
@@ -38,8 +38,8 @@ window.ReviewHelp = Object.freeze({
   },
   progress: {
     title: "Progressの詳しいやり方", image: "/assets/progress.png", size: [1536, 1024],
-    alt: "人が小さな変化を記録し、Weeklyで意味・紐づけ・証拠を補完してGTDへ蓄積する。GTDは月次実績台帳Markdownへ整形し、人が用途別に選択・言い換えて、実績報告・職務経歴書・面接・ライフプランへ分岐する流れ。",
-    flow: ["人が小さな変化を記録する", "GTDが原子的な事実として蓄積する", "Weeklyで意味・紐づけ・証拠を補完し、蓄積へ戻す", "GTDが月次実績台帳Markdownへ整形する", "人が用途別に選択・言い換える", "実績報告・職務経歴書・面接・ライフプランへ分岐する"],
+    alt: "人が小さな変化を記録し、Weeklyで意味・紐づけ・証拠を補完してmokviaへ蓄積する。mokviaは月次実績台帳Markdownへ整形し、人が用途別に選択・言い換えて、実績報告・職務経歴書・面接・ライフプランへ分岐する流れ。",
+    flow: ["人が小さな変化を記録する", "mokviaが原子的な事実として蓄積する", "Weeklyで意味・紐づけ・証拠を補完し、蓄積へ戻す", "mokviaが月次実績台帳Markdownへ整形する", "人が用途別に選択・言い換える", "実績報告・職務経歴書・面接・ライフプランへ分岐する"],
     steps: [
       {label: "小さな変化を記録", purpose: "後で思い出そうとせず、気づいた変化を事実として残すため。", action: "変化に気づいた日、またはその日を振り返るときに、前と比べて変わったことを一文で書き、発生日を選びます。"},
       {label: "原子的な事実として蓄積", purpose: "用途が変わっても組み替えられる材料にするため。", action: "記録するたびに、一つの記録には一つの変化だけを書きます。複数の変化があれば、記録を分けます。"},
