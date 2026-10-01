@@ -30,3 +30,7 @@ docker compose up -d --build
 Nodeは開発時のJS単体検査用で、Windowsのアプリ実行には不要です。Linuxの安全なファイル操作を使用するため、PythonだけでWindowsネイティブ実行する構成は提供しません。
 
 [製品仕様](docs/product-spec.md)、[Web/API契約](docs/webapp-spec.md)、[データスキーマ](docs/data-schema.md)、[公開・依存チェック](docs/DISTRIBUTION-CHECKLIST.md)を参照してください。
+
+## ライセンス
+
+本アプリのソースは [MIT License](LICENSE) で公開します。ベースイメージ同梱ソフトウェアのライセンスは各権利者の条件に従います。
