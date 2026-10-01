@@ -8,4 +8,4 @@ Read docs/SETUP-WINDOWS.md and docs/COPILOT.md before setup. Local Calendar uses
 
 Validate source changes with python3 -m unittest discover -s tests. Optional developer JS checks use node tests/local_calendar_runtime.js and node tests/local_notifications_runtime.js; Node is not required on the company PC.
 
-Public changes contain only generic code, documents, and synthetic tests. The copyright holder approved this distribution under the MIT license. New third-party assets or code still require appropriate rights and notices.
+Public changes contain only generic code, documents, and synthetic tests. The copyright holder approved the current individually permitted use terms in LICENSE. Public source visibility is not permission for unrestricted execution, modification, or redistribution. Preserve prior MIT grants and third-party notices. New third-party assets or code still require appropriate rights and notices.

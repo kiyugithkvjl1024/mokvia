@@ -92,3 +92,7 @@ docker compose -p mokvia ps
 `Start.ps1` がDocker volume一覧と旧Windows状態を確認し、問題がなければ外部volume `mokvia_data` を明示作成してCompose project `mokvia` を起動します。Compose単独のupは未作成volumeを自動作成しません。`MOKVIA_DATA_ROOT=/data`、ヘッダー`X-Mokvia-Web`、通知補助mutex `Local\mokviaNotify`、Windows状態 `%LOCALAPPDATA%\mokvia` を使用します。
 
 旧名の`gtd-local_gtd_data`等のvolumeや `%LOCALAPPDATA%\GtdLocal` が見つかった場合は、具体的な場所を示して停止します。既存データ・バックアップの削除、コピー、自動移行、新しい空volumeの起動はしません。会社版は未導入を前提とし、Ubuntu私用データを持ち込む手順はありません。検出された保存先を確認するまで、そのまま保全してください。
+
+## 利用許可
+
+実行・改変を伴う導入は、[LICENSE](../LICENSE)に従う著作権者または個別許可済みの利用者が行います。ソース公開やZIP取得だけでは実行・改変の許可を意味しません。過去MIT版と第三者の条件は維持されます。

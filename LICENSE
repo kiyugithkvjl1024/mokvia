@@ -1,21 +1,35 @@
-MIT License
+mokvia 個別許可利用条件
 
 Copyright (c) 2026 mokvia contributors
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+本条件は、このLICENSEを付した版以降のmokviaの自作コードおよび資料に適用します。第5項の過去の許諾と第三者の条件は維持されます。「著作権者」は、対象の自作部分について著作権を有する者を指します。
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. 閲覧と検討用の取得
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+誰でもソースを閲覧し、コードを読み検討するためにダウンロードまたはcloneできます。この許可自体は実行・改変・再配布を許可するものではありません。GitHubの規約に基づくGitHubサービス内での閲覧・fork等の権利、およびGitHubやその利用者に認められるサービス内の権利を本条件で妨げません。
+
+2. 個別に許可された実行・改変
+
+実行・改変は、著作権者自身、または著作権者がメール等の記録に残る方法で対象者と利用範囲を個別に許可した利用者のみが行えます。許可された本人は、その許可の範囲内で個人利用および勤務先での本人の業務利用を行い、そのために必要な複製と非公開保管を行えます。
+
+この許可は、勤務先全体、他の社員・同僚・第三者へ自動的に拡張されません。個別の許可に追加条件や範囲が明記されている場合は、その内容に従います。
+
+3. 許可された利用のためのコード処理
+
+許可された利用の補助として、会社承認済みのCopilot等によるコードの読取り・解析・編集その他のコード処理を行えます。会社の情報管理規則および利用するサービスの規約・条件は別途遵守してください。この条項は他の利用者への許可や会社情報の無制限な外部送信を認めるものではありません。
+
+4. 別途許可が必要な行為
+
+上記の範囲外の再配布、販売、再許諾、および他人向けのサーバー・サービス提供には、著作権者の別途の許可が必要です。同僚や他の社員向けの社内共用サーバーでの提供もここに含まれます。改変版にも同じ制限が適用されます。GitHubサービス内の権利については第1項に従います。
+
+5. 過去MIT版と第三者の条件
+
+本条件は、以前にMIT Licenseで提供された版・コードについて成立した許諾を遡及的に取り消し、変更し、または制限するものではありません。その版・コードは当時のMIT Licenseと著作権表示・通知に従って利用できます。
+
+第三者のコード、ライブラリ、ソフトウェア、素材等には、それぞれの権利者のライセンス・条件が適用されます。本条件はそれらの条件を置き換えず、著作権表示・ライセンス・通知を削除する許可を与えません。
+
+6. 現状提供、責任制限と権利留保
+
+適用法令で認められる範囲で、本ソフトウェアおよび資料は現状のまま提供され、商品性、特定目的への適合性、権利非侵害を含め、明示または黙示の保証を行いません。同じ範囲で、著作権者は利用または利用不能等により生じる損害その他の責任を負いません。法令により排除・制限できない責任や権利を本条件で排除・制限しません。
+
+本条件、個別の許可、過去の有効な許諾、および法令で明示的に認められたものを除き、すべての権利を留保します。

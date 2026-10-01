@@ -14,3 +14,5 @@ This is a clean distribution of the local mokvia application. Read docs/SETUP-WI
 - Verify start/stop, duplicate start, loopback-only binding, persistence, backup/restore, notification fallback and time calculations. Record Windows-only checks as pending until run on Windows.
 
 - Use the public source at <https://github.com/kiyugithkvjl1024/mokvia>. Start.ps1 provisions the external named volume `mokvia_data` only after preflight. If legacy `gtd-local_gtd_data`-style volumes or Windows `GtdLocal` state exist, stop and identify them; do not delete, import, or bypass the guard. This is a fresh company installation, not a transfer of personal data.
+
+- Read LICENSE before setup or code changes. Execute or modify only on behalf of the copyright holder or an individually authorized user within that permission. Source visibility is not a general open-source grant; retain prior MIT grants and all third-party notices.
