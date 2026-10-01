@@ -80,3 +80,7 @@ docker compose -p gtd-local ps
 ```
 
 ログに会社情報が含まれ得るので、公開IssueやCopilotへ無確認で貼り付けないでください。データvolume削除やDocker resetを復旧手順として使わないでください。
+
+## 新版への更新
+
+[UPDATE-WINDOWS.md](UPDATE-WINDOWS.md) の停止バックアップ・別フォルダー展開・同じvolumeでの読戻しを使用します。会社側からのコード・データ送信は行いません。
