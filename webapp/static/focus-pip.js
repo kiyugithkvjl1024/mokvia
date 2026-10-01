@@ -1,7 +1,7 @@
 "use strict";
 
 window.FocusPiP = (() => {
-  const SIZE_KEY = "gtd-focus-pip-size";
+  const SIZE_KEY = "mokvia-focus-pip-size";
   const SIZES = Object.freeze({small: {width: 200, height: 140}, medium: {width: 240, height: 160}, large: {width: 300, height: 210}});
   function savedSize() {
     try { const value = window.localStorage.getItem(SIZE_KEY); return Object.hasOwn(SIZES, value) ? value : "medium"; }

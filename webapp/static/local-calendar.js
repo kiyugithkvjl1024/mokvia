@@ -63,7 +63,7 @@
     const apply=button('確認して保存',()=>commit(),form);apply.hidden=true;
     const cancel=button('キャンセル',()=>{if(!applying)dialog.close();},form);
     let snapshot=null, editing=null, pending=null, applying=false, uncertain=false, generation=0;
-    const request=async(path,body) => {const response=await fetch(path,{method:body?'POST':'GET',headers:{'X-GTD-Web':'1',...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});const value=await response.json();if(!response.ok)throw Error(value.error?.message||value.message||'保存・読み込みに失敗しました。');return value;};
+    const request=async(path,body) => {const response=await fetch(path,{method:body?'POST':'GET',headers:{'X-Mokvia-Web':'1',...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});const value=await response.json();if(!response.ok)throw Error(value.error?.message||value.message||'保存・読み込みに失敗しました。');return value;};
     function syncTimed(){startTime.disabled=endDate.disabled=endTime.disabled=!timed.checked;}
     timed.addEventListener('change',syncTimed);
     form.addEventListener('input',()=>{pending=null;apply.hidden=true;preview.hidden=true;save.disabled=false;});

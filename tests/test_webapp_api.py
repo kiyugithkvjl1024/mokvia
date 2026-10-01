@@ -213,7 +213,7 @@ class ReadApiTest(unittest.TestCase):
         )
         before = sorted(path.read_bytes() for path in self.root.rglob("*.md"))
         with mock.patch.object(
-            api, "_gtd_now", return_value=datetime.datetime(2026, 8, 31, 9, 30, tzinfo=datetime.timezone(datetime.timedelta(hours=9)))
+            api, "_mokvia_now", return_value=datetime.datetime(2026, 8, 31, 9, 30, tzinfo=datetime.timezone(datetime.timedelta(hours=9)))
         ):
             status, payload = handle(
                 self.store, "GET", "/api/v1/quick-start-suggestions", {"q": "報"}
@@ -266,7 +266,7 @@ class ReadApiTest(unittest.TestCase):
         self.write_entity("archive/old.md", "task", "task-old", status="done")
 
         with mock.patch.object(
-            api, "_gtd_today", return_value=datetime.date(2026, 8, 29)
+            api, "_mokvia_today", return_value=datetime.date(2026, 8, 29)
         ):
             status, payload = handle(self.store, "GET", "/api/v1/snapshot")
 
@@ -291,7 +291,7 @@ class ReadApiTest(unittest.TestCase):
         self.assertEqual(
             payload["facts"],
             {
-                "gtd_today": "2026-08-29",
+                "mokvia_today": "2026-08-29",
                 "inbox_count": 1,
                 "task_status_counts": {
                     "inbox": 1,
@@ -346,21 +346,21 @@ class ReadApiTest(unittest.TestCase):
         self.write_entity("tasks/blocked.md", "task", "task-blocked", status="next", depends_on="[task-open]")
         self.write_entity("tasks/waiting.md", "task", "task-waiting", status="next", waiting_for="返信")
         self.write_entity("tasks/action-future.md", "task", "task-action-future", status="next", action_date="2026-08-30")
-        with mock.patch.object(api, "_gtd_now", return_value=datetime.datetime(2026, 8, 29, 12, tzinfo=datetime.timezone(datetime.timedelta(hours=9)))), mock.patch.object(api, "_gtd_today", return_value=datetime.date(2026, 8, 29)):
+        with mock.patch.object(api, "_mokvia_now", return_value=datetime.datetime(2026, 8, 29, 12, tzinfo=datetime.timezone(datetime.timedelta(hours=9)))), mock.patch.object(api, "_mokvia_today", return_value=datetime.date(2026, 8, 29)):
             status, payload = handle(self.store, "GET", "/api/v1/snapshot")
         self.assertEqual(status, 200)
         self.assertEqual(payload["facts"]["focus_actionable_next_ids"], ["task-open", "task-ready"])
         self.assertEqual(payload["facts"]["focus_done_task_ids"], ["task-done"])
 
-    def test_snapshot_exposes_the_canonical_jst_gtd_today(self) -> None:
+    def test_snapshot_exposes_the_canonical_jst_mokvia_today(self) -> None:
         """Catches clients deriving the Focus day from their own clock."""
         with mock.patch.object(
-            api, "_gtd_today", return_value=datetime.date(2026, 8, 29)
+            api, "_mokvia_today", return_value=datetime.date(2026, 8, 29)
         ):
             status, payload = handle(self.store, "GET", "/api/v1/snapshot", {})
 
         self.assertEqual(status, 200)
-        self.assertEqual(payload["facts"].get("gtd_today"), "2026-08-29")  # type: ignore[union-attr]
+        self.assertEqual(payload["facts"].get("mokvia_today"), "2026-08-29")  # type: ignore[union-attr]
 
     def test_snapshot_reports_persistent_recovery_gate_without_path_details(self) -> None:
         (self.root / ".webapp-mutation-state").write_bytes(b"opaque")
@@ -464,11 +464,11 @@ class ReadApiTest(unittest.TestCase):
             status="doing",
             body=(
                 "Body\n"
-                "[gtd-focus-monitor] 通知停止期限: 2026-08-19T08:59:59+09:00\n"
-                "[gtd-focus-monitor] 通知停止期限: 2026-08-19T09:30:00+09:00\n"
-                "[gtd-focus-monitor] 通知停止期限: 2026-02-30T12:00:00+09:00\n"
-                "prefix [gtd-focus-monitor] 通知停止期限: 2026-08-19T12:00:00+09:00\n"
-                "[gtd-focus-monitor] 通知停止期限: 2026-08-19T10:15:00+09:00\n"
+                "[mokvia-focus-monitor] 通知停止期限: 2026-08-19T08:59:59+09:00\n"
+                "[mokvia-focus-monitor] 通知停止期限: 2026-08-19T09:30:00+09:00\n"
+                "[mokvia-focus-monitor] 通知停止期限: 2026-02-30T12:00:00+09:00\n"
+                "prefix [mokvia-focus-monitor] 通知停止期限: 2026-08-19T12:00:00+09:00\n"
+                "[mokvia-focus-monitor] 通知停止期限: 2026-08-19T10:15:00+09:00\n"
             ),
         )
         self.write_entity(
@@ -476,13 +476,13 @@ class ReadApiTest(unittest.TestCase):
             "task",
             "task-next",
             status="next",
-            body="[gtd-focus-monitor] 通知停止期限: 2026-08-19T12:00:00+09:00\n",
+            body="[mokvia-focus-monitor] 通知停止期限: 2026-08-19T12:00:00+09:00\n",
         )
         now = datetime.datetime(
             2026, 8, 19, 9, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=9))
         )
 
-        with mock.patch("webapp.api._gtd_now", return_value=now):
+        with mock.patch("webapp.api._mokvia_now", return_value=now):
             status, payload = handle(self.store, "GET", "/api/v1/snapshot")
 
         self.assertEqual(status, 200)
@@ -495,7 +495,7 @@ class ReadApiTest(unittest.TestCase):
         now = datetime.datetime(
             2026, 8, 19, 9, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=9))
         )
-        with mock.patch("webapp.api._gtd_now", return_value=now):
+        with mock.patch("webapp.api._mokvia_now", return_value=now):
             status, payload = handle(self.store, "GET", "/api/v1/snapshot")
         self.assertEqual(status, 200)
         self.assertIsNone(payload["facts"]["focus_notification_pause"])  # type: ignore[index]
@@ -506,9 +506,9 @@ class ReadApiTest(unittest.TestCase):
                 "task",
                 f"task-doing-{index}",
                 status="doing",
-                body="[gtd-focus-monitor] 通知停止期限: 2026-08-19T10:00:00+09:00\n",
+                body="[mokvia-focus-monitor] 通知停止期限: 2026-08-19T10:00:00+09:00\n",
             )
-        with mock.patch("webapp.api._gtd_now", return_value=now):
+        with mock.patch("webapp.api._mokvia_now", return_value=now):
             status, payload = handle(self.store, "GET", "/api/v1/snapshot")
         self.assertEqual(status, 200)
         self.assertIsNone(payload["facts"]["focus_notification_pause"])  # type: ignore[index]
@@ -746,7 +746,7 @@ class ReadApiTest(unittest.TestCase):
         )
         self.write_entity("tasks/f.md", "task", "doing", status="doing")
         self.write_entity("tasks/g.md", "task", "waiting", status="waiting")
-        with mock.patch.object(api, "_gtd_today", return_value=datetime.date(2026, 7, 20)):
+        with mock.patch.object(api, "_mokvia_today", return_value=datetime.date(2026, 7, 20)):
             now_status, now_payload = handle(
                 self.store, "GET", "/api/v1/snapshot", {"availability": "now"}
             )
@@ -806,7 +806,7 @@ class ReadApiTest(unittest.TestCase):
             action_date="2026-07-21", calendar_event_id="later-match-event", **calendar_identity,
         )
 
-        with mock.patch.object(api, "_gtd_today", return_value=datetime.date(2026, 7, 20)):
+        with mock.patch.object(api, "_mokvia_today", return_value=datetime.date(2026, 7, 20)):
             status, payload = handle(
                 self.store,
                 "GET",
@@ -872,7 +872,7 @@ class ReadApiTest(unittest.TestCase):
             ["instant-boundary", "same-instant"],
         )
 
-    def test_date_due_cutoff_uses_end_of_day_in_gtd_local_timezone(self) -> None:
+    def test_date_due_cutoff_uses_end_of_day_in_mokvia_local_timezone(self) -> None:
         self.write_entity(
             "tasks/a.md",
             "task",
@@ -901,7 +901,7 @@ class ReadApiTest(unittest.TestCase):
             ["next-local-date-but-before-cutoff"],
         )
 
-    def test_date_due_is_gtd_local_end_of_day_against_timestamp_cutoff(self) -> None:
+    def test_date_due_is_mokvia_local_end_of_day_against_timestamp_cutoff(self) -> None:
         self.write_entity(
             "tasks/a.md", "task", "date-due", status="next", due="2026-07-20"
         )
@@ -1003,7 +1003,7 @@ class ReadApiTest(unittest.TestCase):
 
         self.assertEqual(validate_repository(self.root), [])
 
-        with mock.patch.object(api, "_gtd_today", return_value=datetime.date(2026, 7, 20)):
+        with mock.patch.object(api, "_mokvia_today", return_value=datetime.date(2026, 7, 20)):
             status, payload = handle(self.store, "GET", "/api/v1/snapshot", {"today": "1"})
 
         self.assertEqual(status, 200)
@@ -1048,7 +1048,7 @@ class ReadApiTest(unittest.TestCase):
         self.write_entity("tasks/e.md", "task", "dateless-next", status="next")
         self.write_entity("tasks/f.md", "task", "dateless-done", status="done")
 
-        with mock.patch.object(api, "_gtd_today", return_value=datetime.date(2026, 7, 20)):
+        with mock.patch.object(api, "_mokvia_today", return_value=datetime.date(2026, 7, 20)):
             status, payload = handle(self.store, "GET", "/api/v1/snapshot", {"today": "1"})
 
         self.assertEqual(status, 200)
@@ -1076,7 +1076,7 @@ class ReadApiTest(unittest.TestCase):
             "tasks/c.md", "task", "due-today", status="next", due="2026-07-20"
         )
 
-        with mock.patch.object(api, "_gtd_today", return_value=datetime.date(2026, 7, 20)):
+        with mock.patch.object(api, "_mokvia_today", return_value=datetime.date(2026, 7, 20)):
             status, payload = handle(
                 self.store, "GET", "/api/v1/snapshot", {"today": "1"}
             )
@@ -1395,7 +1395,7 @@ class MutationApiTest(unittest.TestCase):
         self.store = Store(self.root)
         self.headers = {
             "Origin": "http://127.0.0.1:24873",
-            "X-GTD-Web": "1",
+            "X-Mokvia-Web": "1",
             "Content-Type": "application/json; charset=utf-8",
         }
 
@@ -2532,7 +2532,7 @@ class MutationApiTest(unittest.TestCase):
         for headers in (
             {},
             {**self.headers, "Origin": "http://evil.invalid"},
-            {**self.headers, "X-GTD-Web": "0"},
+            {**self.headers, "X-Mokvia-Web": "0"},
         ):
             with self.subTest(headers=headers):
                 result = handle(
@@ -3202,8 +3202,8 @@ class MutationApiTest(unittest.TestCase):
             status="doing",
             body=(
                 "Body\n"
-                "[gtd-focus-monitor] 通知停止期限: 2026-08-19T09:10:00+09:00\n"
-                "[gtd-focus-monitor] 通知停止期限: 2026-02-30T09:10:00+09:00\n"
+                "[mokvia-focus-monitor] 通知停止期限: 2026-08-19T09:10:00+09:00\n"
+                "[mokvia-focus-monitor] 通知停止期限: 2026-02-30T09:10:00+09:00\n"
             ),
         )
         now = datetime.datetime(
@@ -3234,8 +3234,8 @@ class MutationApiTest(unittest.TestCase):
         )
         self.assertEqual(
             preview["proposed"]["body"],  # type: ignore[index]
-            "\nBody\n[gtd-focus-monitor] 通知停止期限: 2026-02-30T09:10:00+09:00\n\n"
-            "[gtd-focus-monitor] 通知停止期限: 2026-08-19T09:30:00+09:00\n",
+            "\nBody\n[mokvia-focus-monitor] 通知停止期限: 2026-02-30T09:10:00+09:00\n\n"
+            "[mokvia-focus-monitor] 通知停止期限: 2026-08-19T09:30:00+09:00\n",
         )
         applied_status, applied = self.apply(preview)
         self.assertEqual(applied_status, 200)
@@ -3275,9 +3275,9 @@ class MutationApiTest(unittest.TestCase):
             status="doing",
             body=(
                 "Body\n"
-                "[gtd-focus-monitor] 通知停止期限: 2026-08-19T09:10:00+09:00\n"
-                "[gtd-focus-monitor] 通知停止期限: 2026-02-30T09:10:00+09:00\n"
-                "prefix [gtd-focus-monitor] 通知停止期限: 2026-08-19T09:11:00+09:00\n"
+                "[mokvia-focus-monitor] 通知停止期限: 2026-08-19T09:10:00+09:00\n"
+                "[mokvia-focus-monitor] 通知停止期限: 2026-02-30T09:10:00+09:00\n"
+                "prefix [mokvia-focus-monitor] 通知停止期限: 2026-08-19T09:11:00+09:00\n"
             ),
         )
         operation = {
@@ -3293,8 +3293,8 @@ class MutationApiTest(unittest.TestCase):
         self.assertEqual(preview["operation"], operation)
         self.assertEqual(
             preview["proposed"]["body"],  # type: ignore[index]
-            "\nBody\n[gtd-focus-monitor] 通知停止期限: 2026-02-30T09:10:00+09:00\n"
-            "prefix [gtd-focus-monitor] 通知停止期限: 2026-08-19T09:11:00+09:00\n",
+            "\nBody\n[mokvia-focus-monitor] 通知停止期限: 2026-02-30T09:10:00+09:00\n"
+            "prefix [mokvia-focus-monitor] 通知停止期限: 2026-08-19T09:11:00+09:00\n",
         )
         applied_status, applied = self.apply(preview)
         self.assertEqual(applied_status, 200)
@@ -3952,7 +3952,7 @@ class MutationApiTest(unittest.TestCase):
         real_write_bytes = pathlib.Path.write_bytes
 
         def reject_validation_tree_write(path: pathlib.Path, data: bytes) -> int:
-            self.assertNotIn("gtd-workflow", path.as_posix())
+            self.assertNotIn("mokvia-workflow", path.as_posix())
             return real_write_bytes(path, data)
 
         operation = {

@@ -101,7 +101,7 @@ _ISO_TIMESTAMP = re.compile(
     re.ASCII,
 )
 _CONTEXT_TOKEN = re.compile(r"[^\s,\[\]\"'\x00-\x1f\x7f]+")
-_GTD_LOCAL_TIMEZONE = datetime.timezone(datetime.timedelta(hours=9))
+_MOKVIA_LOCAL_TIMEZONE = datetime.timezone(datetime.timedelta(hours=9))
 _MUTATION_ROUTES = {
     "/api/v1/mutations/preview",
     "/api/v1/mutations/apply",
@@ -487,8 +487,8 @@ def _operation_entity_id(value: object) -> str:
     return value
 
 
-def _gtd_now() -> datetime.datetime:
-    return datetime.datetime.now(_GTD_LOCAL_TIMEZONE)
+def _mokvia_now() -> datetime.datetime:
+    return datetime.datetime.now(_MOKVIA_LOCAL_TIMEZONE)
 
 
 def _plan_operation(
@@ -1922,29 +1922,29 @@ def _parse_aware_timestamp(value: str) -> datetime.datetime:
     return parsed
 
 
-def _end_of_gtd_date(value: datetime.date) -> datetime.datetime:
+def _end_of_mokvia_date(value: datetime.date) -> datetime.datetime:
     return datetime.datetime.combine(
-        value, datetime.time.max, tzinfo=_GTD_LOCAL_TIMEZONE
+        value, datetime.time.max, tzinfo=_MOKVIA_LOCAL_TIMEZONE
     )
 
 
 def _parse_due_cutoff(value: str) -> datetime.datetime:
     if _ISO_DATE.fullmatch(value) is not None:
-        return _end_of_gtd_date(_parse_date(value))
+        return _end_of_mokvia_date(_parse_date(value))
     return _parse_aware_timestamp(value)
 
 
-def _gtd_today() -> datetime.date:
-    return datetime.datetime.now(_GTD_LOCAL_TIMEZONE).date()
+def _mokvia_today() -> datetime.date:
+    return datetime.datetime.now(_MOKVIA_LOCAL_TIMEZONE).date()
 
 
-def _is_on_gtd_date(value: str | None, day: datetime.date, *, date_allowed: bool) -> bool:
+def _is_on_mokvia_date(value: str | None, day: datetime.date, *, date_allowed: bool) -> bool:
     if not value:
         return False
     try:
         if date_allowed and _ISO_DATE.fullmatch(value) is not None:
             return _parse_date(value) == day
-        return _parse_aware_timestamp(value).astimezone(_GTD_LOCAL_TIMEZONE).date() == day
+        return _parse_aware_timestamp(value).astimezone(_MOKVIA_LOCAL_TIMEZONE).date() == day
     except (_InvalidQuery, OverflowError):
         return False
 
@@ -1954,7 +1954,7 @@ def _due_is_within(value: str | None, cutoff: datetime.datetime) -> bool:
         return False
     try:
         if _ISO_DATE.fullmatch(value) is not None:
-            due = _end_of_gtd_date(_parse_date(value))
+            due = _end_of_mokvia_date(_parse_date(value))
         else:
             due = _parse_aware_timestamp(value)
     except _InvalidQuery:
@@ -1995,11 +1995,11 @@ def _validated_filters(values: dict[str, str]) -> dict[str, object]:
     if "availability" in values:
         if values["availability"] not in {"now", "later"}:
             raise _InvalidQuery
-        filters["availability"] = (values["availability"], _gtd_today())
+        filters["availability"] = (values["availability"], _mokvia_today())
     if "today" in values:
         if values["today"] != "1":
             raise _InvalidQuery
-        filters["today"] = _gtd_today()
+        filters["today"] = _mokvia_today()
     if "unassigned" in values:
         if values["unassigned"] != "1" or "project_id" in values:
             raise _InvalidQuery
@@ -2048,15 +2048,15 @@ def _matches(
             return False
         day = filters["today"]  # type: ignore[assignment]
         if frontmatter.get("status") == "done":
-            if not _is_on_gtd_date(frontmatter.get("completed_at"), day, date_allowed=False):
+            if not _is_on_mokvia_date(frontmatter.get("completed_at"), day, date_allowed=False):
                 return False
         elif not (
-            _is_on_gtd_date(frontmatter.get("scheduled_start"), day, date_allowed=False)
-            or _is_on_gtd_date(frontmatter.get("due"), day, date_allowed=True)
-            or _is_on_gtd_date(frontmatter.get("action_date"), day, date_allowed=True)
+            _is_on_mokvia_date(frontmatter.get("scheduled_start"), day, date_allowed=False)
+            or _is_on_mokvia_date(frontmatter.get("due"), day, date_allowed=True)
+            or _is_on_mokvia_date(frontmatter.get("action_date"), day, date_allowed=True)
             or (
                 bool(frontmatter.get("continuation_of"))
-                and _is_on_gtd_date(frontmatter.get("created_at"), day, date_allowed=False)
+                and _is_on_mokvia_date(frontmatter.get("created_at"), day, date_allowed=False)
             )
         ):
             return False
@@ -2134,8 +2134,8 @@ def _matches(
 def _facts(entities: list[Entity]) -> dict[str, object]:
     active = [entity for entity in entities if not _is_archived(entity)]
     tasks = [entity for entity in active if entity.entity_type == "task"]
-    now = _gtd_now()
-    today = _gtd_today()
+    now = _mokvia_now()
+    today = _mokvia_today()
     task_status_by_id = {
         entity.entity_id: entity.frontmatter.get("status")
         for entity in entities if entity.entity_type == "task"
@@ -2151,7 +2151,7 @@ def _facts(entities: list[Entity]) -> dict[str, object]:
         available_from = fields.get("available_from")
         if available_from:
             threshold = (
-                datetime.datetime.combine(_parse_date(available_from), datetime.time(), _GTD_LOCAL_TIMEZONE)
+                datetime.datetime.combine(_parse_date(available_from), datetime.time(), _MOKVIA_LOCAL_TIMEZONE)
                 if len(available_from) == 10 else _parse_aware_timestamp(available_from)
             )
             if threshold > now:
@@ -2272,7 +2272,7 @@ def _facts(entities: list[Entity]) -> dict[str, object]:
         key=lambda entity: (entity.frontmatter.get("start_date", ""), entity.entity_id),
     )
     return {
-        "gtd_today": today.isoformat(),
+        "mokvia_today": today.isoformat(),
         "inbox_count": counts["inbox"],
         "task_status_counts": counts,
         "active_projects_without_next_action": missing_next_action,
@@ -2380,7 +2380,7 @@ def _handle_quick_start_suggestions(
             raise _InvalidQuery
         repository_snapshot = store.read_snapshot()
         suggestions = build_quick_start_suggestions(
-            repository_snapshot.entities, _gtd_now(), value
+            repository_snapshot.entities, _mokvia_now(), value
         )
     except _InvalidQuery:
         return _error(400, "invalid_query", "query parameters are invalid")
@@ -2532,7 +2532,7 @@ def _handle_resource_allocation_report(
         with store.mutation_lock():
             report = store.resource_allocation_report(
                 values["axis"], values["period_kind"], values["period_start"],
-                generated_at=_gtd_now(),
+                generated_at=_mokvia_now(),
             )
         return 200, report
     except (_InvalidQuery, InputError, ValueError):
@@ -2564,7 +2564,7 @@ def _handle_resource_allocation_tasks(
             report = store.resource_allocation_tasks(
                 values["axis"], values["period_kind"], values["period_start"],
                 values["target"], limit=limit, cursor=values.get("cursor"),
-                generated_at=_gtd_now(),
+                generated_at=_mokvia_now(),
             )
         return 200, report
     except (_InvalidQuery, InputError, ValueError):

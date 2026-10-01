@@ -1,6 +1,6 @@
 . (Join-Path $PSScriptRoot 'Common.ps1')
 $created = $false
-$mutex = New-Object System.Threading.Mutex($true, 'Local\GtdLocalNotify', [ref]$created)
+$mutex = New-Object System.Threading.Mutex($true, 'Local\mokviaNotify', [ref]$created)
 if (-not $created) { $mutex.Dispose(); exit 0 }
 $stopFile = Join-Path $script:StateDir 'notify-stop'
 $idFile = Join-Path $script:StateDir 'last-notification-id'
@@ -15,7 +15,7 @@ try {
     $icon.Visible = $true
     $lastId = ''
     if (Test-Path -LiteralPath $idFile) { $lastId = (Get-Content -LiteralPath $idFile -Raw).Trim() }
-    $headers = @{ 'Origin' = $script:BaseUrl; 'X-GTD-Web' = '1' }
+    $headers = @{ 'Origin' = $script:BaseUrl; 'X-Mokvia-Web' = '1' }
     while (-not (Test-Path -LiteralPath $stopFile)) {
         try {
             Invoke-RestMethod -Method Post -Uri ($script:BaseUrl + '/api/v1/local-notifications/heartbeat') -Headers $headers -ContentType 'application/json' -Body '{}' -TimeoutSec 3 | Out-Null

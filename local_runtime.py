@@ -20,7 +20,7 @@ from scripts.validate_frontmatter import validate_repository
 
 JST = dt.timezone(dt.timedelta(hours=9))
 DIRECTORIES = ('inbox','tasks','projects','goals','purposes','visions','areas','roadmap-outcomes','cycles','time-allocation-plans','progress','reviews/daily','reviews/weekly','archive')
-DATA_ROOT = Path(os.environ.get('GTD_DATA_ROOT','/data'))
+DATA_ROOT = Path(os.environ.get('MOKVIA_DATA_ROOT','/data'))
 ORIGINS = ('http://localhost:24873','http://127.0.0.1:24873')
 
 def initialize(root: Path):
@@ -173,11 +173,11 @@ def serve(root: Path,*,container=False):
                 if method!='POST' or query or body!=b'{}': return 400,{'error':{'code':'invalid_request'}}
                 notifications.heartbeat(now); return 200,{'status':'ok'}
             return None
-        server=create_server('0.0.0.0' if container else '127.0.0.1',24873,root,bind_origin=ORIGINS[0],mutation_origins=ORIGINS,extra_handler=extra,health_details={'distribution':'gtd-local','mode':'local'},strict_hosts=('localhost:24873','127.0.0.1:24873'))
+        server=create_server('0.0.0.0' if container else '127.0.0.1',24873,root,bind_origin=ORIGINS[0],mutation_origins=ORIGINS,extra_handler=extra,health_details={'distribution':'mokvia','mode':'local'},strict_hosts=('localhost:24873','127.0.0.1:24873'))
         stopped=threading.Event()
         def worker():
             while not stopped.is_set():
-                try: tick(server._gtd_store,notifications,dt.datetime.now(dt.timezone.utc))
+                try: tick(server._mokvia_store,notifications,dt.datetime.now(dt.timezone.utc))
                 except Exception:
                     notifications.publish('monitor-failed:'+str(int(time.time()//300)),'監視不能（状態を確認してください）',dt.datetime.now(dt.timezone.utc))
                     # Stateful failures stop automatic mutations; no retry of an unknown apply.

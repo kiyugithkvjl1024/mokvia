@@ -16,7 +16,7 @@ class WindowsDistributionTest(unittest.TestCase):
 
     def test_notification_has_mutex_and_heartbeat_and_origin(self):
         source = (ROOT / 'windows/Notify.ps1').read_text()
-        for required in ('System.Threading.Mutex', 'local-notifications/heartbeat', 'X-GTD-Web', 'Origin', 'ShowBalloonTip', 'last-notification-id'):
+        for required in ('System.Threading.Mutex', 'local-notifications/heartbeat', 'X-Mokvia-Web', 'Origin', 'ShowBalloonTip', 'last-notification-id'):
             self.assertIn(required, source)
 
     def test_backup_avoids_powershell_binary_redirect_and_restore_stops_first(self):
@@ -41,7 +41,7 @@ class WindowsDistributionTest(unittest.TestCase):
         self.assertLess(source.index(copy), source.index(cleanup))
         self.assertNotIn("'--rm'", source)
         self.assertIn('/data/.local-state/', source)
-        self.assertNotIn('/tmp/gtd-backup.tar', source)
+        self.assertNotIn('/tmp/mokvia-backup.tar', source)
         self.assertIn('unlink(missing_ok=True)', source)
 
     def test_start_checks_ownership_before_up_and_never_kills_port_process(self):
@@ -49,11 +49,11 @@ class WindowsDistributionTest(unittest.TestCase):
         self.assertLess(source.index('Assert-PortOwnership'), source.index("'up'"))
         self.assertNotIn('Stop-Process', source)
         self.assertIn('/api/v1/health', source)
-        self.assertIn("$health.distribution -eq 'gtd-local'", source)
+        self.assertIn("$health.distribution -eq 'mokvia'", source)
         self.assertIn("$health.status -eq 'ok'", source)
 
     @unittest.skipUnless(shutil.which('pwsh'), 'PowerShell unavailable on this Linux host')
     def test_powershell_parser(self):
-        for script in (ROOT / 'windows').glob('*.ps1'):
+        for script in list((ROOT / 'windows').glob('*.ps1')) + [ROOT / 'tests/windows-startup.ps1']:
             quoted = str(script).replace("'", "''")
             subprocess.run(['pwsh', '-NoProfile', '-Command', "$e=$null; [System.Management.Automation.Language.Parser]::ParseFile('" + quoted + "',[ref]$null,[ref]$e) > $null; if($e.Count){$e; exit 1}"], check=True)

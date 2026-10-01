@@ -49,7 +49,7 @@ from scripts.validate_frontmatter import (
 
 
 _FOCUS_MONITOR_PAUSE_MARKER_LINE = re.compile(
-    r"(?m)^\[gtd-focus-monitor\] 通知停止期限: "
+    r"(?m)^\[mokvia-focus-monitor\] 通知停止期限: "
     r"(?P<deadline>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\+09:00)(?:\n|\Z)"
 )
 _BREAK_TITLE = "5分休憩"
@@ -59,7 +59,7 @@ _SERVER_MANAGED_TASK_FIELDS = {"timer_kind", "timer_ends_at"}
 _PROJECT_KANBAN_LANES = (
     "not_started", "doing", "on_hold", "completed", "dropped"
 )
-_GTD_LOCAL_TIMEZONE = datetime.timezone(datetime.timedelta(hours=9))
+_MOKVIA_LOCAL_TIMEZONE = datetime.timezone(datetime.timedelta(hours=9))
 _RESOURCE_ALLOCATION_PERIOD_ORDER = ("day", "week", "month", "year")
 _RESOURCE_ALLOCATION_EXPAND_MAX_TARGETS = 431
 _RESOURCE_ALLOCATION_EXPAND_MAX_EFFECTS = 862
@@ -97,7 +97,7 @@ def focus_monitor_pause_deadline(
 
 def _replace_valid_focus_monitor_pause_markers(body: str, deadline: str) -> str:
     retained = _remove_valid_focus_monitor_pause_markers(body).rstrip("\n")
-    marker = f"[gtd-focus-monitor] 通知停止期限: {deadline}"
+    marker = f"[mokvia-focus-monitor] 通知停止期限: {deadline}"
     return f"{retained}\n\n{marker}" if retained else marker
 
 
@@ -1526,7 +1526,7 @@ class Store:
             self._require_mutations_available_locked()
             self._reject_workflow_symlinks()
             current = self._require_current_doing_task(entity_id, base_hash)
-            now = current_time().astimezone(_GTD_LOCAL_TIMEZONE)
+            now = current_time().astimezone(_MOKVIA_LOCAL_TIMEZONE)
             deadline = (now + datetime.timedelta(minutes=minutes)).isoformat(
                 timespec="seconds"
             )
@@ -2142,8 +2142,8 @@ class Store:
         if end_date is None:
             raise InputError("allocation period is invalid")
         return (
-            datetime.datetime.combine(start_date, datetime.time(), _GTD_LOCAL_TIMEZONE),
-            datetime.datetime.combine(end_date, datetime.time(), _GTD_LOCAL_TIMEZONE),
+            datetime.datetime.combine(start_date, datetime.time(), _MOKVIA_LOCAL_TIMEZONE),
+            datetime.datetime.combine(end_date, datetime.time(), _MOKVIA_LOCAL_TIMEZONE),
         )
 
     @staticmethod
@@ -2349,7 +2349,7 @@ class Store:
             raise InputError("allocation axis is invalid")
         start, end = self._resource_allocation_period(period_kind, period_start)
         generated = current_time() if generated_at is None else generated_at
-        generated = generated.astimezone(_GTD_LOCAL_TIMEZONE)
+        generated = generated.astimezone(_MOKVIA_LOCAL_TIMEZONE)
         sessions = self._resource_allocation_sessions(
             axis, start, end, generated
         )
@@ -2590,7 +2590,7 @@ class Store:
         generated = current_time() if generated_at is None else generated_at
         sessions = [
             session for session in self._resource_allocation_sessions(
-                axis, start, end, generated.astimezone(_GTD_LOCAL_TIMEZONE)
+                axis, start, end, generated.astimezone(_MOKVIA_LOCAL_TIMEZONE)
             ) if session.target == target
         ]
         offset = 0
@@ -5011,7 +5011,7 @@ class Store:
             threshold = available_from
         else:
             threshold = datetime.datetime.combine(
-                available_from, datetime.time(), _GTD_LOCAL_TIMEZONE
+                available_from, datetime.time(), _MOKVIA_LOCAL_TIMEZONE
             )
         return threshold <= now
 
@@ -5424,7 +5424,7 @@ class Store:
             "status": resume_status,
             "created_at": timestamp,
             "updated_at": timestamp,
-            "action_date": now.astimezone(_GTD_LOCAL_TIMEZONE).date().isoformat(),
+            "action_date": now.astimezone(_MOKVIA_LOCAL_TIMEZONE).date().isoformat(),
         }
         for key in (
             "project_id", "area_id", "due", "contexts", "estimated_minutes",
@@ -5642,7 +5642,7 @@ class Store:
             return plan
         validation_source = self._capture_workflow_validation_source()
         with tempfile.TemporaryDirectory(
-            prefix="gtd-workflow-validation-source-"
+            prefix="mokvia-workflow-validation-source-"
         ) as temporary:
             validation_root = pathlib.Path(temporary)
             self._materialize_workflow_validation_source(
@@ -6011,7 +6011,7 @@ class Store:
         before_errors = (
             set() if include_existing else set(validate_repository(repository_root))
         )
-        with tempfile.TemporaryDirectory(prefix="gtd-workflow-preview-") as temporary:
+        with tempfile.TemporaryDirectory(prefix="mokvia-workflow-preview-") as temporary:
             virtual_root = pathlib.Path(temporary)
             for directory in _SCAN_DIRECTORIES:
                 (virtual_root / directory).mkdir(parents=True, exist_ok=True)

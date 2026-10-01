@@ -1,7 +1,7 @@
 "use strict";
 
-const API_HEADERS = Object.freeze({"X-GTD-Web": "1"});
-const MUTATION_HEADERS = Object.freeze({"X-GTD-Web": "1", "Content-Type": "application/json"});
+const API_HEADERS = Object.freeze({"X-Mokvia-Web": "1"});
+const MUTATION_HEADERS = Object.freeze({"X-Mokvia-Web": "1", "Content-Type": "application/json"});
 const TASK_STATUSES = Object.freeze(["inbox", "planned", "next", "doing", "waiting", "scheduled", "someday", "done"]);
 const TASK_FILTER_KEYS = Object.freeze(["status", "context", "project_id", "area_id", "max_minutes", "due_before"]);
 const UNKNOWN_APPLY_MESSAGE = "保存結果を確認できません。再送せず、現在の画面を再読み込みして確認してください。";
@@ -21,7 +21,7 @@ const REVIEW_STEPS = Object.freeze({
     {id: "goal_alignment", label: "Goal整合: Goalとの整合を確認した", description: "今週の行動と方向性を照合します。", href: "/projects?mode=review"},
   ]),
 });
-const REVIEW_DRAFT_PREFIX = "gtd.reviewDraft.v1:";
+const REVIEW_DRAFT_PREFIX = "mokvia.reviewDraft.v1:";
 const taskSettings = window.TaskSettings;
 const availableFromParts = taskSettings.availableFromParts;
 const availableFromValue = taskSettings.availableFromValue;
@@ -130,8 +130,8 @@ let focusConflictReloadInFlight = false;
 let quickStartAreaId = "";
 let quickStartAreas = [];
 let quickStartAreaInitialized = false;
-const QUICK_START_RECENT_AREAS_STORAGE_KEY = "gtd.quickStart.areaRecent.v1";
-const QUICK_START_LAST_AREA_STORAGE_KEY = "gtd.quickStart.areaLastStarted.v1";
+const QUICK_START_RECENT_AREAS_STORAGE_KEY = "mokvia.quickStart.areaRecent.v1";
+const QUICK_START_LAST_AREA_STORAGE_KEY = "mokvia.quickStart.areaLastStarted.v1";
 let allocationController = null;
 let inboxStage=null,inboxStageProjects=[],inboxStageAreas=[],inboxStageAreaId="",inboxSettingsForm=null,inboxStageLoad=0;
 let currentElapsedInterval = null;
@@ -162,7 +162,7 @@ let projectDetail = null;
 let goalDetail = null;
 let reviewDetail = null;
 let activeReviewKind = "weekly";
-const REVIEW_TAB_KEY = "gtd.review.tab.v1";
+const REVIEW_TAB_KEY = "mokvia.review.tab.v1";
 let reviewDraftPeriod = null;
 let reviewGuideMarks = [];
 let progressDetail = null;
@@ -172,7 +172,7 @@ let activeDirectionLevel = "overview";
 const directionDetails = {purposes: null, visions: null, areas: null};
 let directionSnapshot = null;
 let focusStatus = "";
-const FOCUS_COLLAPSE_STORAGE_KEY = "gtd.focus.action-date-board.v1";
+const FOCUS_COLLAPSE_STORAGE_KEY = "mokvia.focus.action-date-board.v1";
 let focusCollapsed = {};
 let focusMoveContext = null;
 let focusDueContext = null;
@@ -183,7 +183,7 @@ let valueLanternTrigger = null;
 let roadmapSnapshot = null;
 let roadmapOutcomeDetail = null;
 let roadmapView = "overview";
-const ROADMAP_VIEW_STORAGE_KEY = "gtd.roadmap.view.v1";
+const ROADMAP_VIEW_STORAGE_KEY = "mokvia.roadmap.view.v1";
 let roadmapYearMatrixState = null;
 const loadGenerations = {inbox: 0, clarify: 0, tasks: 0, projects: 0, goals: 0, reviews: 0, reviewEdit: 0, roadmap: 0, status: 0, edit: 0};
 
@@ -1132,7 +1132,7 @@ elements.workSessionForm.addEventListener("submit", async (event) => {
   if (activePreview) closeWorkSessionDialog(false);
 });
 function appendEmptyState(list, text) { const item = document.createElement("li"); item.className = "muted"; item.textContent = text; list.append(item); }
-function focusToday(facts) { return facts && typeof facts.gtd_today === "string" ? facts.gtd_today : tokyoToday(); }
+function focusToday(facts) { return facts && typeof facts.mokvia_today === "string" ? facts.mokvia_today : tokyoToday(); }
 function focusSectionList(key) { return ({today: elements.focusSectionTodayList, dated: elements.focusSectionDatedList, undated: elements.focusSectionUndatedList})[key]; }
 function focusSectionButton(key) { return ({today: elements.focusSectionToday, dated: elements.focusSectionDated, undated: elements.focusSectionUndated})[key]; }
 function saveFocusCollapse() { try { localStorage.setItem(FOCUS_COLLAPSE_STORAGE_KEY, JSON.stringify(focusCollapsed)); } catch (_error) {} }

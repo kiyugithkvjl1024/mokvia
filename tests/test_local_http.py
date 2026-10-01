@@ -21,6 +21,6 @@ class LocalHttpTest(unittest.TestCase):
                 with self.assertRaises(HTTPError) as err: urlopen(Request(url+'/api/v1/snapshot',headers={'Host':'attacker.example'}))
                 self.assertEqual(403,err.exception.code); err.exception.close()
                 with self.assertRaises(HTTPError) as err:
-                    urlopen(Request(url+'/api/v1/mutations/preview',data=b'{}',headers={'Host':'localhost:24873','Origin':'http://attacker.example','X-GTD-Web':'1','Content-Type':'application/json'}))
+                    urlopen(Request(url+'/api/v1/mutations/preview',data=b'{}',headers={'Host':'localhost:24873','Origin':'http://attacker.example','X-Mokvia-Web':'1','Content-Type':'application/json'}))
                 self.assertEqual(403,err.exception.code); err.exception.close()
             finally: server.shutdown();thread.join();server.server_close()

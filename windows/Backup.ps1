@@ -1,13 +1,14 @@
-param([string]$Destination = (Join-Path $env:LOCALAPPDATA 'GtdLocal\Backups'))
+param([string]$Destination = (Join-Path $env:LOCALAPPDATA 'mokvia\Backups'))
 . (Join-Path $PSScriptRoot 'Common.ps1')
 Assert-Docker
+Assert-NoLegacyData
 $directory = Assert-OutsideSource -Path $Destination
 New-Item -ItemType Directory -Force -Path $directory | Out-Null
 # Stop the writer, including the timer loop, before snapshotting. Remains stopped.
 & (Join-Path $PSScriptRoot 'Stop.ps1')
-$name = 'gtd-local-backup-' + [Guid]::NewGuid().ToString('N')
+$name = 'mokvia-backup-' + [Guid]::NewGuid().ToString('N')
 $staged = '/data/.local-state/' + $name + '.tar'
-$target = Join-Path $directory ('gtd-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0,8) + '.tar')
+$target = Join-Path $directory ('mokvia-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0,8) + '.tar')
 try {
     # Stage in the data volume: Docker cp cannot read this container tmpfs.
     Invoke-Compose -Arguments @('run', '--no-deps', '-d', '--name', $name, 'app', 'python3', '-c', 'import time; time.sleep(3600)') | Out-Null

@@ -1,13 +1,14 @@
-name: gtd-local
+name: mokvia
 services:
   app:
     build: .
+    image: mokvia-app:local
     ports:
       - "127.0.0.1:24873:24873"
     volumes:
-      - gtd_data:/data
+      - mokvia_data:/data
     environment:
-      GTD_DATA_ROOT: /data
+      MOKVIA_DATA_ROOT: /data
     restart: "no"
     stop_grace_period: 30s
     security_opt:
@@ -23,4 +24,6 @@ services:
       timeout: 3s
       retries: 6
 volumes:
-  gtd_data:
+  mokvia_data:
+    name: mokvia_data
+    external: true

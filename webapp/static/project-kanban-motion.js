@@ -1,7 +1,7 @@
 "use strict";
 
 (() => {
-  const LANE_DISCLOSURE_STORAGE_KEY = "gtd.projects.status-lanes.v1";
+  const LANE_DISCLOSURE_STORAGE_KEY = "mokvia.projects.status-lanes.v1";
   const reduced = () => typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const frame = (callback) => (typeof requestAnimationFrame === "function" ? requestAnimationFrame(callback) : setTimeout(callback, 0));
   const cancel = (value) => { if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(value); else clearTimeout(value); };

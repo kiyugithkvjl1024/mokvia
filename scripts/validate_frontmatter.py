@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate constrained frontmatter in GTD entity Markdown files."""
+"""Validate constrained frontmatter in mokvia entity Markdown files."""
 
 import dataclasses
 import datetime

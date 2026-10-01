@@ -122,7 +122,7 @@ def validate_mutation_headers(
     if origin not in configured_origins:
         raise ForbiddenRequestError("mutation Origin is forbidden")
 
-    web_marker = _single_header(normalized, "X-GTD-Web", ForbiddenRequestError)
+    web_marker = _single_header(normalized, "X-Mokvia-Web", ForbiddenRequestError)
     if web_marker != "1":
         raise ForbiddenRequestError("mutation marker is forbidden")
 

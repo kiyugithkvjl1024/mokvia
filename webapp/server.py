@@ -1,4 +1,4 @@
-"""Fixed-allowlist HTTP transport for the local GTD Web application."""
+"""Fixed-allowlist HTTP transport for the local mokvia Web application."""
 
 from __future__ import annotations
 
@@ -123,7 +123,7 @@ class _Server(ThreadingHTTPServer):
         try:
             super().server_close()
         finally:
-            store = getattr(self, "_gtd_store", None)
+            store = getattr(self, "_mokvia_store", None)
             close = getattr(store, "close", None)
             if callable(close):
                 close()
@@ -293,7 +293,7 @@ def _read_static(static_root: pathlib.Path, filename: str) -> bytes:
 
 class _RequestHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.0"
-    server_version = "GTDWeb"
+    server_version = "MokviaWeb"
     sys_version = ""
     _store: object
     _api_state: object
@@ -301,7 +301,7 @@ class _RequestHandler(BaseHTTPRequestHandler):
     _static_root: pathlib.Path
 
     def version_string(self) -> str:
-        return "GTDWeb"
+        return "MokviaWeb"
 
     def setup(self) -> None:
         super().setup()
@@ -367,7 +367,7 @@ class _RequestHandler(BaseHTTPRequestHandler):
         self._response_logged = True
         timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
         line = f"{timestamp} {self._safe_method()} {self._safe_route()} {status}\n"
-        lock = getattr(self.server, "_gtd_log_lock", None)
+        lock = getattr(self.server, "_mokvia_log_lock", None)
         if isinstance(lock, type(threading.Lock())):
             with lock:
                 sys.stderr.write(line)
@@ -701,9 +701,9 @@ def create_server(
     except BaseException:
         store.close()
         raise
-    server._gtd_store = store  # type: ignore[attr-defined]
-    server._gtd_api_state = api_state  # type: ignore[attr-defined]
-    server._gtd_log_lock = threading.Lock()  # type: ignore[attr-defined]
+    server._mokvia_store = store  # type: ignore[attr-defined]
+    server._mokvia_api_state = api_state  # type: ignore[attr-defined]
+    server._mokvia_log_lock = threading.Lock()  # type: ignore[attr-defined]
     return server
 
 

@@ -6,7 +6,7 @@ function focusCycleContextModel(completeEntities, visibleEntities, facts, now = 
   const byId = new Map(entities.map((entity) => [entity.id, entity]));
   const cycle = byId.get(roadmap.active_cycle_id);
   if (!cycle || cycle.kind !== "cycles") return {cycle: null, outcomes: [], suggestion: ""};
-  const today = facts.gtd_today, visibleIds = new Set((visibleEntities || []).map((entity) => entity.id));
+  const today = facts.mokvia_today, visibleIds = new Set((visibleEntities || []).map((entity) => entity.id));
   const baselineCandidates = Array.isArray(facts.focus_actionable_next_ids) ? new Set(facts.focus_actionable_next_ids) : null;
   const doneIds = new Set(Array.isArray(facts.focus_done_task_ids) ? facts.focus_done_task_ids : []);
   for (const entity of completeEntities || []) if (entity.kind === "tasks") { if (safeFrontmatter(entity).status === "done") doneIds.add(entity.id); else doneIds.delete(entity.id); }
@@ -76,10 +76,10 @@ function renderCycleProjectTimeline(snapshot) {
   const host = elements.cycleProjectTimeline;
   if (!host) return;
   host.replaceChildren();
-  const model = cycleProjectTimelineModel(snapshot, snapshot.facts && snapshot.facts.gtd_today || tokyoToday());
+  const model = cycleProjectTimelineModel(snapshot, snapshot.facts && snapshot.facts.mokvia_today || tokyoToday());
   if (!model.cycle) { const empty = document.createElement("p"); empty.className = "muted"; empty.textContent = "Active Cycleはありません。"; host.append(empty); return; }
   const cycleFm = safeFrontmatter(model.cycle), intro = document.createElement("p");
-  const today = snapshot.facts && snapshot.facts.gtd_today || tokyoToday();
+  const today = snapshot.facts && snapshot.facts.mokvia_today || tokyoToday();
   intro.className = "muted"; intro.textContent = (cycleFm.start_date || "?") + "〜" + (cycleFm.end_date || "?") + "を基準に表示。Projectの期間は目安です。" + (model.todayPercent === null ? "今日はCycle期間外（" + today + "）。" : "縦線は今日（" + today + "）。"); host.append(intro);
   const list = document.createElement("div"); list.className = "cycle-project-rows";
   for (const item of model.projects) {

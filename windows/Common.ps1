@@ -2,7 +2,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $script:RepoRoot = Split-Path $PSScriptRoot -Parent
 $script:BaseUrl = 'http://localhost:24873'
-$script:StateDir = Join-Path $env:LOCALAPPDATA 'GtdLocal'
+$script:StateDir = Join-Path $env:LOCALAPPDATA 'mokvia'
 $script:ComposeFile = Join-Path $script:RepoRoot 'compose.yaml'
 New-Item -ItemType Directory -Force -Path $script:StateDir | Out-Null
 function Invoke-Docker {
@@ -13,7 +13,7 @@ function Invoke-Docker {
 }
 function Invoke-Compose {
     param([string[]]$Arguments)
-    Invoke-Docker -Arguments (@('compose', '-p', 'gtd-local', '-f', $script:ComposeFile) + $Arguments)
+    Invoke-Docker -Arguments (@('compose', '-p', 'mokvia', '-f', $script:ComposeFile) + $Arguments)
 }
 function Assert-Docker {
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { throw 'Install company-approved Docker with Linux containers first.' }
@@ -40,4 +40,16 @@ function Assert-OutsideSource {
         throw 'Keep company data and backups outside the source directory.'
     }
     return $full
+}
+
+function Assert-NoLegacyData {
+    $volumes = @(Invoke-Docker -Arguments @('volume', 'ls', '--format', '{{.Name}}'))
+    $legacy = @($volumes | Where-Object { $_ -match '(^gtd-local_|_gtd_data$)' })
+    if ($legacy.Count -gt 0) {
+        throw ('Existing legacy data volume(s): ' + ($legacy -join ', ') + '. Startup stopped; no data was copied or deleted. Review these volumes before a clean mokvia install.')
+    }
+    $legacyState = Join-Path $env:LOCALAPPDATA 'GtdLocal'
+    if (Test-Path -LiteralPath $legacyState) {
+        throw ('Existing legacy Windows state: ' + $legacyState + '. Startup stopped; keep its data and backups and review it before a clean mokvia install.')
+    }
 }

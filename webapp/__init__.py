@@ -1,1 +1,1 @@
-"""Local GTD Web application package."""
+"""Local mokvia Web application package."""

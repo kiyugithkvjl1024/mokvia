@@ -1,12 +1,13 @@
-param([Parameter(Mandatory=$true)][string]$Archive, [string]$BackupDirectory = (Join-Path $env:LOCALAPPDATA 'GtdLocal\Backups'))
+param([Parameter(Mandatory=$true)][string]$Archive, [string]$BackupDirectory = (Join-Path $env:LOCALAPPDATA 'mokvia\Backups'))
 . (Join-Path $PSScriptRoot 'Common.ps1')
 Assert-Docker
+Assert-NoLegacyData
 $inputFile = Assert-OutsideSource -Path $Archive
 if (-not (Test-Path -LiteralPath $inputFile -PathType Leaf)) { throw 'Archive file not found.' }
 & (Join-Path $PSScriptRoot 'Stop.ps1')
 # Preserve current data outside the volume before attempting any restore.
 & (Join-Path $PSScriptRoot 'Backup.ps1') -Destination $BackupDirectory
-$name = 'gtd-local-restore-' + [Guid]::NewGuid().ToString('N')
+$name = 'mokvia-restore-' + [Guid]::NewGuid().ToString('N')
 $staged = '/data/.local-state/' + $name + '.tar'
 try {
     Invoke-Compose -Arguments @('run', '--no-deps', '-d', '--name', $name, 'app', 'python3', '-c', 'import time; time.sleep(3600)') | Out-Null

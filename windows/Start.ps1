@@ -1,13 +1,15 @@
 # Run from a normal logged-in Windows session. Never changes execution policy.
 . (Join-Path $PSScriptRoot 'Common.ps1')
 Assert-Docker
+Assert-NoLegacyData
 Assert-PortOwnership
+Invoke-Docker -Arguments @('volume', 'create', 'mokvia_data') | Out-Null
 Invoke-Compose -Arguments @('up', '-d', '--build') | Out-Host
 $ready = $false
 for ($attempt = 0; $attempt -lt 60; $attempt++) {
     try {
         $health = Invoke-RestMethod -Uri ($script:BaseUrl + '/api/v1/health') -TimeoutSec 2
-        if ($health.status -eq 'ok' -and $health.distribution -eq 'gtd-local') {
+        if ($health.status -eq 'ok' -and $health.distribution -eq 'mokvia') {
             $ready = $true
             break
         }

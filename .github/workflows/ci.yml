@@ -1,4 +1,4 @@
-name: Local distribution checks
+name: mokvia distribution checks
 on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
@@ -27,3 +27,5 @@ jobs:
             [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$tokens, [ref]$errors) | Out-Null
             if ($errors.Count) { throw ($errors | Out-String) }
           }
+      - shell: powershell
+        run: ./tests/windows-startup.ps1

@@ -4,7 +4,7 @@
 
 Python標準ライブラリのThreadingHTTPServer、vanilla JavaScript/CSS/HTML、Markdownファイルを使います。SQLite、Node runtime、外部AI APIは不要です。Linux専用のファイルロック・安全なrenameを保持するためWindowsではDocker Linuxコンテナ内で動かします。
 
-ホスト公開は `127.0.0.1:24873` のみ。コンテナ内は `0.0.0.0:24873` ですがComposeでloopbackへ限定します。Hostは `localhost:24873` または `127.0.0.1:24873` のみ。変更APIは同じ2つのHTTP Origin、`X-GTD-Web: 1`、JSON Content-Typeを検査します。ログイン機能はありません。同じPCを利用できるユーザーからのアクセスを防ぐものではないため、会社PCのアクセス制御を前提とします。LAN・公開ホスティング・proxyへの露出は対象外です。
+ホスト公開は `127.0.0.1:24873` のみ。コンテナ内は `0.0.0.0:24873` ですがComposeでloopbackへ限定します。Hostは `localhost:24873` または `127.0.0.1:24873` のみ。変更APIは同じ2つのHTTP Origin、`X-Mokvia-Web: 1`、JSON Content-Typeを検査します。ログイン機能はありません。同じPCを利用できるユーザーからのアクセスを防ぐものではないため、会社PCのアクセス制御を前提とします。LAN・公開ホスティング・proxyへの露出は対象外です。
 
 ## 画面とAPI
 
@@ -18,7 +18,7 @@ Capture/Inbox、Clarify、Focus、Task検索、Project、Direction、Roadmap/Cyc
 - `GET /api/v1/calendar?view=day|week|month&date=YYYY-MM-DD`：予定・実績の読取投影。
 - `GET /api/v1/local-notifications`：最新通知とWindows helper heartbeat状態。
 - `POST /api/v1/local-notifications/heartbeat`：同一Originで空JSONを送る。Taskは変更しない。
-- `GET /api/v1/health`：distribution=`gtd-local`、mode=`local` を確認。
+- `GET /api/v1/health`：distribution=`mokvia`、mode=`local` を確認。
 
 詳しい既存APIのpayloadとエラー契約は `webapp/api.py` と `tests/test_webapp_api.py` が正本です。Copilotはコード・合成テストを読み、まず最新detail、次にpreview、ユーザーの確認後にapply、最後にdetailを読戻します。stale hash、validation、recovery、結果不明に対し推測した再送を行いません。
 

@@ -7808,7 +7808,7 @@ class StoreTaskWorkflowTest(unittest.TestCase):
 
     def test_interrupt_switch_keeps_pause_marker_only_on_closed_original(self) -> None:
         marker = (
-            "[gtd-focus-monitor] \u901a\u77e5\u505c\u6b62\u671f\u9650: "
+            "[mokvia-focus-monitor] \u901a\u77e5\u505c\u6b62\u671f\u9650: "
             "2026-07-19T10:00:00+09:00"
         )
         similar_prose = f"Keep this prose before {marker} after"
@@ -7853,7 +7853,7 @@ class StoreTaskWorkflowTest(unittest.TestCase):
 
     def test_interrupt_keeps_calendar_impossible_pause_marker_on_continuation(self) -> None:
         invalid_marker = (
-            "[gtd-focus-monitor] 通知停止期限: "
+            "[mokvia-focus-monitor] 通知停止期限: "
             "2026-99-99T99:99:99+09:00"
         )
         with tempfile.TemporaryDirectory() as temporary:
