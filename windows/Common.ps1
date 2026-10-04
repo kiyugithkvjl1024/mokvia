@@ -13,7 +13,22 @@ function Invoke-Docker {
 }
 function Invoke-Compose {
     param([string[]]$Arguments)
-    Invoke-Docker -Arguments (@('compose', '-p', 'mokvia', '-f', $script:ComposeFile) + $Arguments)
+    $files = @('-f', $script:ComposeFile)
+    # stop/ps/logs/exec act on existing project containers and need no host bind.
+    # Only explicit backup/restore commands may create a maintenance container
+    # without capture; a normal run/up must validate and bind the configured folder.
+    $maintenance = $Arguments.Count -gt 0 -and $Arguments[0] -in @('stop', 'ps', 'logs', 'exec')
+    if ($Arguments.Count -gt 0 -and $Arguments[0] -eq 'run') {
+        $serviceIndex = [Array]::IndexOf($Arguments, 'app')
+        if ($serviceIndex -ge 1 -and $Arguments.Count -gt ($serviceIndex + 1)) {
+            $command = @($Arguments[($serviceIndex + 1)..($Arguments.Count - 1)])
+            $maintenance = ($command.Count -eq 3 -and $command[0] -ceq 'python3' -and $command[1] -ceq '-c' -and $command[2] -ceq 'import time; time.sleep(3600)') -or
+                ($command.Count -ge 4 -and $command[0] -ceq 'python3' -and $command[1] -ceq '-m' -and $command[2] -ceq 'local_runtime' -and $command[3] -cin @('backup', 'restore'))
+        }
+    }
+    $captureOverride = Get-CaptureComposeOverride -Maintenance:$maintenance
+    if ($captureOverride) { $files += @('-f', $captureOverride) }
+    Invoke-Docker -Arguments (@('compose', '-p', 'mokvia') + $files + $Arguments)
 }
 function Assert-Docker {
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { throw 'Install company-approved Docker with Linux containers first.' }
@@ -52,4 +67,141 @@ function Assert-NoLegacyData {
     if (Test-Path -LiteralPath $legacyState) {
         throw ('Existing legacy Windows state: ' + $legacyState + '. Startup stopped; keep its data and backups and review it before a clean mokvia install.')
     }
+}
+
+# Capture settings live only in the user's external state directory, never in ZIP source.
+function Write-AtomicCaptureJson {
+    param([string]$Path, [object]$Value)
+    Assert-OutsideSource -Path $script:StateDir | Out-Null
+    $temporary = Join-Path $script:StateDir ('capture-' + [Guid]::NewGuid().ToString('N') + '.tmp')
+    try {
+        [IO.File]::WriteAllText($temporary, ($Value | ConvertTo-Json -Depth 10), (New-Object Text.UTF8Encoding($false)))
+        if (Test-Path -LiteralPath $Path) { [IO.File]::Replace($temporary, $Path, $null) }
+        else { [IO.File]::Move($temporary, $Path) }
+    } finally {
+        if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
+    }
+}
+function Get-CaptureReparseTag {
+    param([string]$Path)
+    # Windows cloud placeholders are reparse points too. Inspect the tag instead of
+    # rejecting every OneDrive directory or permitting arbitrary junctions.
+    if (-not ('MokviaCaptureNative' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+public static class MokviaCaptureNative {
+    [StructLayout(LayoutKind.Sequential)] public struct TagInfo { public uint Attributes; public uint Tag; }
+    [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+    static extern SafeFileHandle CreateFileW(string path, uint access, uint share, IntPtr security, uint creation, uint flags, IntPtr template);
+    [DllImport("kernel32.dll", SetLastError=true)]
+    static extern bool GetFileInformationByHandleEx(SafeFileHandle file, int infoClass, out TagInfo info, uint size);
+    public static uint GetTag(string path) {
+        using (SafeFileHandle file = CreateFileW(path, 0x80, 7, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero)) {
+            if (file.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error());
+            TagInfo info;
+            if (!GetFileInformationByHandleEx(file, 9, out info, 8)) throw new Win32Exception(Marshal.GetLastWin32Error());
+            return info.Tag;
+        }
+    }
+}
+'@
+    }
+    return [MokviaCaptureNative]::GetTag($Path)
+}
+function Assert-CaptureFolder {
+    param([string]$Folder, [switch]$ShapeOnly)
+    if ([string]::IsNullOrWhiteSpace($Folder) -or -not [IO.Path]::IsPathRooted($Folder)) {
+        throw 'CaptureFolder must be an explicit absolute existing directory.'
+    }
+    # Company OneDrive must be a local drive path, never a UNC/network source.
+    if ($Folder.StartsWith('\\') -or $Folder.StartsWith('//')) { throw 'Network and device paths are not allowed for CaptureFolder.' }
+    if ([IO.Path]::DirectorySeparatorChar -eq '\' -and $Folder -notmatch '^[A-Za-z]:[\\/]') {
+        throw 'CaptureFolder must include its local drive.'
+    }
+    if ($Folder -match '^\\\\[?.]\\') { throw 'Device paths are not allowed for CaptureFolder.' }
+    if ([IO.Path]::DirectorySeparatorChar -eq '\') {
+        $drive = New-Object IO.DriveInfo([IO.Path]::GetPathRoot($Folder))
+        if ($drive.DriveType -eq [IO.DriveType]::Network) { throw 'Mapped network drives are not allowed for CaptureFolder.' }
+    }
+    $full = [IO.Path]::GetFullPath($Folder).TrimEnd('\', '/')
+    $pathRoot = [IO.Path]::GetPathRoot([IO.Path]::GetFullPath($Folder)).TrimEnd('\', '/')
+    if ($full.Equals($pathRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'CaptureFolder must not be a drive or share root.' }
+    $source = [IO.Path]::GetFullPath($script:RepoRoot).TrimEnd('\', '/')
+    $separator = [IO.Path]::DirectorySeparatorChar
+    if ($full.Equals($source, [StringComparison]::OrdinalIgnoreCase) -or
+        $full.StartsWith($source + $separator, [StringComparison]::OrdinalIgnoreCase) -or
+        $source.StartsWith($full + $separator, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'CaptureFolder must not overlap the source directory.'
+    }
+    if ($ShapeOnly) { return $full }
+    if (-not (Test-Path -LiteralPath $full -PathType Container)) { throw 'CaptureFolder must already exist; no directory is created automatically.' }
+    # Inspect only the explicitly chosen directory and its ancestors; never walk children.
+    $current = Get-Item -LiteralPath $full -Force
+    while ($current) {
+        $linkProperty = $current.PSObject.Properties['LinkType']
+        if ($linkProperty -and $linkProperty.Value) { throw 'CaptureFolder and its ancestors must not be symlinks or junctions.' }
+        if (($current.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            $tag = Get-CaptureReparseTag -Path $current.FullName
+            # IO_REPARSE_TAG_CLOUD and CLOUD_1 ... CLOUD_F share this masked value.
+            if (([uint32]$tag -band [uint32]4294905855) -ne [uint32]2415919130) {
+                throw 'CaptureFolder has an unsupported reparse point. Only Windows cloud placeholders are allowed.'
+            }
+        }
+        $current = $current.Parent
+    }
+    return $full
+}
+function Set-CaptureConfiguration {
+    param([string]$Folder, [switch]$Disable)
+    if ($Disable) { $config = [ordered]@{ version = 1; enabled = $false } }
+    else { $config = [ordered]@{ version = 1; enabled = $true; folder = (Assert-CaptureFolder -Folder $Folder) } }
+    Write-AtomicCaptureJson -Path (Join-Path $script:StateDir 'capture-config.json') -Value $config
+}
+function Get-CaptureComposeOverride {
+    param([switch]$Maintenance)
+    $configPath = Join-Path $script:StateDir 'capture-config.json'
+    $overridePath = Join-Path $script:StateDir 'capture-compose.json'
+    if (-not (Test-Path -LiteralPath $configPath)) {
+        # A surviving override without its authority must not silently enable a mount.
+        if (Test-Path -LiteralPath $overridePath) { throw 'Capture override exists without its configuration. Review external mokvia state.' }
+        return $null
+    }
+    Assert-OutsideSource -Path $script:StateDir | Out-Null
+    try { $config = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8 | ConvertFrom-Json }
+    catch { throw 'Invalid capture configuration JSON. Review external mokvia state.' }
+    if ($null -eq $config) { throw 'Invalid capture configuration.' }
+    $names = @($config.PSObject.Properties.Name)
+    if ($names -notcontains 'version' -or $names -notcontains 'enabled' -or
+        ($config.version -isnot [int] -and $config.version -isnot [long]) -or $config.version -ne 1 -or $config.enabled -isnot [bool]) {
+        throw 'Invalid capture configuration version or enabled value.'
+    }
+    if (@($names | Where-Object { $_ -notin @('version', 'enabled', 'folder') }).Count -gt 0) { throw 'Unexpected capture configuration fields.' }
+    if (-not $config.enabled) {
+        if ($names -contains 'folder') { throw 'Disabled capture configuration must not contain a folder.' }
+        if (Test-Path -LiteralPath $overridePath) { Remove-Item -LiteralPath $overridePath -Force }
+        return $null
+    }
+    if ($names -notcontains 'folder' -or $config.folder -isnot [string]) { throw 'Enabled capture configuration requires a folder.' }
+    $folder = Assert-CaptureFolder -Folder $config.folder -ShapeOnly:$Maintenance
+    # The same project/service identity comes from the base Compose file. A
+    # maintenance command must never require or mount the handoff filesystem.
+    if ($Maintenance) { return $null }
+    # JSON is valid YAML; serialization prevents YAML quoting/injection. Compose
+    # interpolates dollar signs even in JSON strings, so escape them explicitly.
+    $override = [ordered]@{
+        services = [ordered]@{
+            app = [ordered]@{
+                command = @('python3', '-m', 'local_runtime', 'serve', '--container', '--capture-folder', '/capture-inbox')
+                volumes = @([ordered]@{
+                    type = 'bind'; source = $folder.Replace('$', '$$'); target = '/capture-inbox'; read_only = $true
+                    bind = [ordered]@{ create_host_path = $false }
+                })
+            }
+        }
+    }
+    Write-AtomicCaptureJson -Path $overridePath -Value $override
+    return $overridePath
 }

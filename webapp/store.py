@@ -440,8 +440,8 @@ _FAST_TASK_WORKFLOW_ACTIONS = frozenset(
 _BARE_VALUE_PATTERN = re.compile(r"[A-Za-z0-9_./+:-]+")
 _INLINE_LIST_PATTERN = re.compile(r"\[.*\]")
 _CONTENT_HASH_PATTERN = re.compile(r"[0-9a-f]{64}")
-_CALENDAR_IMPORT_TASK_ID_PATTERN = re.compile(
-    r"task-calendar-[0-9a-f]{24}\Z", re.ASCII
+_IMPORTED_TASK_ID_PATTERN = re.compile(
+    r"(?:task-calendar-[0-9a-f]{24}|task-capture-[0-9a-f]{32})\Z", re.ASCII
 )
 _GENERATED_KEYS = {"id", "type", "created_at", "updated_at"}
 _CREATE_FIELDS = {
@@ -8520,7 +8520,7 @@ class Store:
         if requested_id is not None and (
             entity_type != "task"
             or type(requested_id) is not str
-            or _CALENDAR_IMPORT_TASK_ID_PATTERN.fullmatch(requested_id) is None
+            or _IMPORTED_TASK_ID_PATTERN.fullmatch(requested_id) is None
         ):
             raise InputError("requested create ID is invalid")
 
@@ -9713,7 +9713,7 @@ class Store:
             requested_id = inputs["requested_id"] or None
             if requested_id is not None and (
                 plan.entity_type != "task"
-                or _CALENDAR_IMPORT_TASK_ID_PATTERN.fullmatch(requested_id) is None
+                or _IMPORTED_TASK_ID_PATTERN.fullmatch(requested_id) is None
                 or requested_id != plan.entity_id
             ):
                 raise InputError("create plan requested ID is invalid")

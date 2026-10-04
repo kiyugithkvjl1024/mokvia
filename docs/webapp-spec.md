@@ -29,3 +29,7 @@ Capture/Inbox、Clarify、Focus、Task検索、Project、Direction、Roadmap/Cyc
 バックアップは停止後に正本Markdownとmutation状態だけをtarへ出します。復元は一時領域でarchiveのパス・種類・サイズ・スキーマを検証し、現データの安全コピーと中断markerを作成してから入れ替えます。復元中断markerがある場合は自動起動を拒否します。Windowsからの操作は `windows/` のスクリプトを使用します。
 
 外部カレンダー識別フィールドは互換スキーマに残りますが、この配布は新規空データから開始し、同期・OAuth・外部API経路を持ちません。PWA/service worker、外部画像、認証情報は含めません。
+
+### ローカルCalendarとメッセージcapture
+
+汎用Task createの明示IDは従来の `task-calendar-<24 hex>` に加え、`task-capture-<32 hex>` を許可する。新しいfrontmatter項目は追加しない。共通importerは初回受付日時・source identityから重複を防ぎ、既存preview/apply経由でInboxまたはnext/action_dateを作成する。schema versionと元メッセージmetadataは本文先頭の `mokvia-capture-v1` コメント、元リンクは本文Markdownに記録する。本文プレビューではこの機械metadataコメントのみを非表示にし、通常の本文とリンクを表示する。本体serverは明示した専用folderがある場合だけ取り込み、会社版も同じimporterを使う。ローカルCalendarは既存Taskの対応予定日・時刻付き予定・実績・締切を表示し、既存APIで予定を操作する。Google取得・同期は起動せず、既存個人Google同期・固定host/rootは維持する。OneDrive・Power Automate・Windows設定だけを会社adapterへ分離する。

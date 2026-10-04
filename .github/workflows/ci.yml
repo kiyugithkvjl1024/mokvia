@@ -14,7 +14,7 @@ jobs:
         with:
           node-version: '22'
       - run: python -m unittest discover -s tests
-      - run: node tests/local_calendar_runtime.js && node tests/local_notifications_runtime.js
+      - run: node tests/local_calendar_runtime.js && node tests/local_notifications_runtime.js && node tests/local_capture_runtime.js
       - run: docker compose build
   windows-syntax:
     runs-on: windows-latest

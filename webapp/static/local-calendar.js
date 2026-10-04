@@ -36,7 +36,7 @@
     const section = document.createElement('section'); section.id = 'local-calendar-screen'; section.className = 'panel local-calendar';
     const el = (tag, text, parent = section) => { const e = document.createElement(tag); if (text) e.textContent = text; parent.append(e); return e; };
     el('h1', 'カレンダー');
-    el('p', '日本時間（JST）／予定・実績・期限を区別して表示します。外部カレンダーとの同期はありません。');
+    el('p', '日本時間（JST）／予定・実績・期限を区別して表示します。ローカルTaskの表示です。既存の外部同期設定は変更しません。');
     const controls = el('div', '', section); controls.className = 'calendar-controls';
     const button = (text, handler, parent = controls) => { const b = el('button', text, parent); b.type = 'button'; b.addEventListener('click', handler); return b; };
     const view = el('select', '', controls); view.setAttribute('aria-label', '表示期間');
@@ -63,7 +63,7 @@
     const apply=button('確認して保存',()=>commit(),form);apply.hidden=true;
     const cancel=button('キャンセル',()=>{if(!applying)dialog.close();},form);
     let snapshot=null, editing=null, pending=null, applying=false, uncertain=false, generation=0;
-    const request=async(path,body) => {const response=await fetch(path,{method:body?'POST':'GET',headers:{'X-Mokvia-Web':'1',...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});const value=await response.json();if(!response.ok)throw Error(value.error?.message||value.message||'保存・読み込みに失敗しました。');return value;};
+    const request=async(path,body) => {const response=await fetch(path,{method:body?'POST':'GET',headers:{[document.querySelector('meta[name="mutation-marker"]')?.content||'X-GTD-Web']:'1',...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});const value=await response.json();if(!response.ok)throw Error(value.error?.message||value.message||'保存・読み込みに失敗しました。');return value;};
     function syncTimed(){startTime.disabled=endDate.disabled=endTime.disabled=!timed.checked;}
     timed.addEventListener('change',syncTimed);
     form.addEventListener('input',()=>{pending=null;apply.hidden=true;preview.hidden=true;save.disabled=false;});

@@ -4,6 +4,7 @@ import tempfile
 import pathlib
 import json
 from webapp import api
+from webapp.security import ALLOWED_MUTATION_ORIGIN, WEB_MARKER_HEADER
 from webapp.store import Store
 from types import SimpleNamespace
 from webapp.store import Entity, InputError
@@ -76,7 +77,7 @@ class CalendarMutationTest(unittest.TestCase):
             (self.root/name).mkdir(parents=True)
         self.store = Store(self.root)
         self.state = api.ApiState(self.store)
-        self.headers = {'Origin':'http://127.0.0.1:24873','X-Mokvia-Web':'1','Content-Type':'application/json'}
+        self.headers = {'Origin':ALLOWED_MUTATION_ORIGIN,WEB_MARKER_HEADER:'1','Content-Type':'application/json'}
 
     def mutate(self, operation):
         status, preview = api.handle(self.store,'POST','/api/v1/mutations/preview',headers=self.headers,body=json.dumps(operation).encode(),state=self.state)

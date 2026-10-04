@@ -3,8 +3,10 @@ $ErrorActionPreference = 'Stop'
 $originalLocalAppData = $env:LOCALAPPDATA
 $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('mokvia-start-test-' + [Guid]::NewGuid().ToString('N'))
 $global:Calls = [Collections.Generic.List[string]]::new()
+$global:DockerArguments = [Collections.Generic.List[object]]::new()
 function global:docker {
     $parts = @($args); $command = $parts -join ' '
+    $global:DockerArguments.Add($parts)
     $global:Calls.Add($command); $global:LASTEXITCODE = 0
     if ($command -eq 'info --format {{.OSType}}') { return 'linux' }
     if ($command -eq 'volume ls --format {{.Name}}') { return $global:FakeVolumes }
@@ -40,7 +42,103 @@ try {
     Assert-True ([bool]($global:Calls -match 'compose -p mokvia .* up ')) 'Fresh install must use the mokvia project.'
     Assert-True ([bool]($global:Calls -match 'windows[/\\]Notify.ps1')) 'Fresh install must launch the packaged notification helper.'
     Assert-True (Test-Path (Join-Path $env:LOCALAPPDATA 'mokvia')) 'Windows state must use the mokvia directory.'
-    Write-Host 'Windows startup protection passed (Docker/OS boundaries simulated).'
+    $stateDir = Join-Path $env:LOCALAPPDATA 'mokvia'
+    Assert-True (-not (Test-Path (Join-Path $stateDir 'capture-config.json'))) 'Default startup must leave capture disabled.'
+    Assert-True (-not [bool]($global:Calls -match 'capture-compose.json')) 'Disabled capture must not add an override.'
+
+    $capture = Join-Path $tempRoot 'Incoming space $literal # test'
+    New-Item -ItemType Directory -Path $capture | Out-Null
+    $global:Calls.Clear()
+    & (Join-Path $SourceRoot 'windows/Start.ps1') -CaptureFolder $capture
+    $configFile = Join-Path $stateDir 'capture-config.json'
+    $overrideFile = Join-Path $stateDir 'capture-compose.json'
+    $config = Get-Content -LiteralPath $configFile -Raw | ConvertFrom-Json
+    $override = Get-Content -LiteralPath $overrideFile -Raw | ConvertFrom-Json
+    Assert-True ($config.enabled -eq $true -and $config.folder -eq $capture) 'Explicit folder must persist outside the source.'
+    $mounts = @($override.services.app.volumes)
+    Assert-True ($mounts.Count -eq 1) 'Override must expose only one dedicated capture mount.'
+    Assert-True ($mounts[0].target -eq '/capture-inbox' -and $mounts[0].read_only -eq $true) 'Capture mount must be read-only and dedicated.'
+    Assert-True ($mounts[0].type -eq 'bind' -and $mounts[0].bind.create_host_path -eq $false) 'Missing host directory must never be auto-created.'
+    Assert-True ($mounts[0].source -eq $capture.Replace('$', '$$')) 'Literal dollar paths must escape Compose interpolation.'
+    Assert-True (($override.services.app.command -join ' ') -eq 'python3 -m local_runtime serve --container --capture-folder /capture-inbox') 'Capture command must use the explicit container folder.'
+    Assert-True ([bool]($global:Calls -match 'capture-compose.json.* up ')) 'Configured startup must use its override.'
+    $lastDocker = $global:DockerArguments[$global:DockerArguments.Count - 1]
+    Assert-True ($lastDocker[6] -eq $overrideFile) 'Compose override path must be passed as one argument.'
+    $global:Calls.Clear()
+    & (Join-Path $SourceRoot 'windows/Start.ps1')
+    Assert-True ([bool]($global:Calls -match 'capture-compose.json.* up ')) 'Restart without parameters must reuse capture settings.'
+    . (Join-Path $SourceRoot 'windows/Common.ps1')
+    # Maintenance must still address mokvia/app after OneDrive disappears, without a bind.
+    Remove-Item -LiteralPath $capture -Force
+    foreach ($operation in @('stop', 'ps', 'logs', 'exec')) {
+        $global:Calls.Clear()
+        Invoke-Compose -Arguments @($operation, 'app')
+        Assert-True (-not [bool]($global:Calls -match 'capture-compose.json')) 'Existing-container maintenance must omit the unavailable capture mount.'
+        Assert-True ([bool]($global:Calls -match 'compose -p mokvia .* app$')) 'Maintenance must preserve the same mokvia project/service identity.'
+    }
+    foreach ($command in @('backup', 'restore')) {
+        $global:Calls.Clear()
+        Invoke-Compose -Arguments @('run', '--no-deps', 'app', 'python3', '-m', 'local_runtime', $command)
+        Assert-True (-not [bool]($global:Calls -match 'capture-compose.json')) 'Explicit backup/restore run must not bind the handoff folder.'
+    }
+    $global:Calls.Clear()
+    Invoke-Compose -Arguments @('run', '--no-deps', '-d', '--name', 'synthetic-maintenance', 'app', 'python3', '-c', 'import time; time.sleep(3600)')
+    Assert-True (-not [bool]($global:Calls -match 'capture-compose.json')) 'Packaged backup/restore temporary container must not bind capture.'
+    foreach ($arguments in @(@('up', '-d'), @('run', 'app', 'python3', '-m', 'local_runtime', 'serve', '--container'))) {
+        $global:Calls.Clear(); $caught = ''
+        try { Invoke-Compose -Arguments $arguments | Out-Null } catch { $caught = $_.Exception.Message }
+        Assert-True ([bool]$caught -and $global:Calls.Count -eq 0) 'Normal startup/run must refuse a missing configured handoff folder before Docker.'
+    }
+    New-Item -ItemType Directory -Path $capture | Out-Null
+    # Simulate reparse metadata without creating junctions or requiring admin rights.
+    $nativeTagFunction = ${function:Get-CaptureReparseTag}
+    $global:CaptureItem = [pscustomobject]@{ FullName = $capture; Parent = $null; Attributes = [IO.FileAttributes]::ReparsePoint; LinkType = $null }
+    function Get-Item { param([string]$LiteralPath, [switch]$Force); return $global:CaptureItem }
+    function Get-CaptureReparseTag { param([string]$Path); return $global:CaptureTag }
+    try {
+        $global:CaptureTag = [uint32]2415919130
+        Assert-True ((Assert-CaptureFolder -Folder $capture) -eq $capture) 'OneDrive cloud reparse points must be allowed.'
+        $global:CaptureTag = [uint32]2684354563
+        $caught = ''
+        try { Assert-CaptureFolder -Folder $capture | Out-Null } catch { $caught = $_.Exception.Message }
+        Assert-True ([bool]$caught) 'Junction reparse tags must fail closed.'
+        $global:Calls.Clear()
+        Invoke-Compose -Arguments @('stop', 'app')
+        Assert-True (-not [bool]($global:Calls -match 'capture-compose.json')) 'Stopping must remain safe after the handoff becomes a junction.'
+        $global:CaptureTag = [uint32]2415919130
+        $global:CaptureItem.LinkType = 'SymbolicLink'
+        $caught = ''
+        try { Assert-CaptureFolder -Folder $capture | Out-Null } catch { $caught = $_.Exception.Message }
+        Assert-True ([bool]$caught) 'Explicit symlink metadata must be rejected.'
+    } finally {
+        Remove-Item Function:Get-Item
+        Set-Item Function:Get-CaptureReparseTag -Value $nativeTagFunction
+    }
+    foreach ($bad in @($SourceRoot, (Split-Path $SourceRoot -Parent), (Join-Path $tempRoot 'missing'), '.', [IO.Path]::GetPathRoot($capture), '\\synthetic-server\share\Incoming', '//synthetic-server/share/Incoming')) {
+        $global:Started = $false; $caught = ''
+        try { & (Join-Path $SourceRoot 'windows/Start.ps1') -CaptureFolder $bad } catch { $caught = $_.Exception.Message }
+        Assert-True (-not $global:Started -and [bool]$caught) ('Unsafe capture path must fail closed: ' + $bad)
+    }
+    $caught = ''; $global:Started = $false
+    try { & (Join-Path $SourceRoot 'windows/Start.ps1') -CaptureFolder $capture -DisableCapture } catch { $caught = $_.Exception.Message }
+    Assert-True (-not $global:Started -and [bool]$caught) 'Contradictory capture parameters must stop startup.'
+    $savedConfig = Get-Content -LiteralPath $configFile -Raw
+    [IO.File]::WriteAllText($configFile, '{"version":1,"enabled":"yes","folder":"unsafe"}')
+    $caught = ''; $global:Started = $false
+    try { & (Join-Path $SourceRoot 'windows/Start.ps1') } catch { $caught = $_.Exception.Message }
+    Assert-True (-not $global:Started -and [bool]$caught) 'Invalid saved configuration must fail closed.'
+    [IO.File]::WriteAllText($configFile, $savedConfig)
+    $global:Calls.Clear()
+    & (Join-Path $SourceRoot 'windows/Start.ps1') -DisableCapture
+    $config = Get-Content -LiteralPath $configFile -Raw | ConvertFrom-Json
+    Assert-True ($config.enabled -eq $false) 'Explicit disable must persist.'
+    Assert-True (-not (Test-Path -LiteralPath $overrideFile)) 'Disable must remove the stale capture override.'
+    Assert-True (-not [bool]($global:Calls -match 'capture-compose.json')) 'Disabled startup must use the base Compose command.'
+    $global:Calls.Clear()
+    & (Join-Path $SourceRoot 'windows/Start.ps1')
+    Assert-True (-not [bool]($global:Calls -match 'capture-compose.json')) 'Disable must survive restart.'
+    Write-Host 'Windows startup and capture configuration protection passed (Docker/OS boundaries simulated).'
+
 } finally {
     $env:LOCALAPPDATA = $originalLocalAppData
     Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue

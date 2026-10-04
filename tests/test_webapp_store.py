@@ -1692,6 +1692,24 @@ class StoreEntityMutationTest(unittest.TestCase):
                         None,
                     )
 
+    def test_company_capture_create_binds_requested_id(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = self.make_repository(pathlib.Path(temporary_directory))
+            with contextlib.closing(Store(root)) as store:
+                task_id = "task-capture-" + "a" * 32
+                plan = store.plan_create_entity(
+                    "task", {"title": "Synthetic capture", "status": "next",
+                             "action_date": "2026-10-03", "due": "2026-10-09"},
+                    "Synthetic source", requested_id=task_id,
+                )
+                created = store.apply_mutation_plan(plan)
+                self.assertEqual(created.entity_id, task_id)
+                self.assertEqual(created.frontmatter["action_date"], "2026-10-03")
+                self.assertEqual(created.frontmatter["due"], "2026-10-09")
+                with self.assertRaises(DestinationConflict):
+                    store.plan_create_entity("task", {"title": "Duplicate"}, "", requested_id=task_id)
+                self.assertEqual(validate_repository(root), [])
+
     def test_calendar_import_create_binds_exact_requested_task_id(self) -> None:
         requested_id = "task-calendar-0123456789abcdef01234567"
         with tempfile.TemporaryDirectory() as temporary_directory:

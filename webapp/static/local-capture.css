@@ -1,0 +1,4 @@
+.local-capture-status, .local-capture-source { margin-block: 1rem; padding: 1rem; border: 1px solid var(--border); border-radius: .5rem; overflow-wrap: anywhere; }
+.local-capture-status > summary { cursor: pointer; }
+.local-capture-source { display: flex; flex-direction: column; gap: .5rem; }
+.local-capture-source > p { margin: 0; }

@@ -30,6 +30,7 @@ def initialize(root: Path):
         path=root/name
         if path.is_symlink(): raise ValueError('data directory must not be a symlink')
         path.mkdir(parents=True,exist_ok=True)
+    if (root/'.local-state').is_symlink(): raise ValueError('local state must not be a symlink')
     (root/'.local-state').mkdir(mode=0o700,exist_ok=True)
 
 @contextlib.contextmanager
@@ -54,6 +55,15 @@ def _archive(root: Path, output: Path):
                 if path.is_file() and path.suffix=='.md': tar.add(path,arcname=str(path.relative_to(root)),recursive=False)
         state=root/'.webapp-mutation-state'
         if state.exists(): tar.add(state,arcname=state.name,recursive=False)
+        from webapp.local_capture import directory, receipt_records, read_file
+        receipts=root/'.local-state/capture-receipts'
+        if receipts.exists() or receipts.is_symlink():
+            with directory(receipts) as fd:
+                for key in receipt_records(fd):
+                    raw=read_file(fd,key+'.json')[0]
+                    member=tarfile.TarInfo('.local-state/capture-receipts/'+key+'.json')
+                    member.size=len(raw); member.mode=0o600
+                    tar.addfile(member,__import__('io').BytesIO(raw))
 
 def backup(root: Path, output: Path):
     initialize(root)
@@ -76,11 +86,16 @@ def restore(root: Path, archive: Path):
                 if p.is_absolute() or '..' in p.parts or member.name in seen or not member.isfile(): raise ValueError('unsafe archive member')
                 seen.add(member.name)
                 valid=any(p.is_relative_to(Path(d)) for d in DIRECTORIES) and p.suffix=='.md'
-                if not valid and member.name!='.webapp-mutation-state': raise ValueError('unexpected archive member')
+                receipt=re.fullmatch(r'\.local-state/capture-receipts/[0-9a-f]{64}\.json',member.name)
+                if not valid and member.name!='.webapp-mutation-state' and not receipt: raise ValueError('unexpected archive member')
             tar.extractall(staging,members=members,filter='data')
         if validate_repository(staging): raise ValueError('restored data fails schema validation')
         recovery=staging/'.webapp-mutation-state'
         if recovery.exists() and recovery.read_bytes()!=b'idle\n': raise ValueError('archive requires mutation recovery')
+        from webapp.local_capture import directory, receipt_records
+        staged_receipts=staging/'.local-state/capture-receipts'
+        if staged_receipts.exists():
+            with directory(staged_receipts) as fd: receipt_records(fd)
         with contextlib.closing(Store(root)) as store,store.mutation_lock():
             stamp=dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
             safety=root/'.local-state'/f'pre-restore-{stamp}.tar'; _archive(root,safety)
@@ -93,6 +108,9 @@ def restore(root: Path, archive: Path):
                 shutil.copytree(staging/name,target)
             if recovery.exists(): shutil.copyfile(recovery,root/recovery.name)
             elif (root/'.webapp-mutation-state').exists(): (root/'.webapp-mutation-state').unlink()
+            target_receipts=root/'.local-state/capture-receipts'
+            if target_receipts.exists(): shutil.rmtree(target_receipts)
+            if staged_receipts.exists(): shutil.copytree(staged_receipts,target_receipts)
             marker.unlink()
         return safety
 
@@ -151,21 +169,15 @@ def tick(store,notifications,now):
     except (TypeError,ValueError): text='開始時刻未記録'
     notifications.publish(f'focus:{task.entity_id}:{slot}',text,now)
 
-def serve(root: Path,*,container=False):
+def serve(root: Path,*,container=False,capture_folder=None):
     initialize(root)
     if (root/'.local-state/restore-incomplete').exists(): raise RuntimeError('restore incomplete; operator recovery required')
     if validate_repository(root): raise RuntimeError('data validation failed')
     from webapp.server import create_server
-    from webapp.local_calendar import calendar_projection
     with runtime_claim(root):
         notifications=Notifications(root)
         def extra(store,method,path,query,headers,body):
             now=dt.datetime.now(dt.timezone.utc)
-            if path=='/api/v1/calendar':
-                try:
-                    if method!='GET' or set(query)-{'view','date'} or any(not isinstance(v,str) for v in query.values()): raise ValueError()
-                    return 200,calendar_projection(store,query.get('view','month'),query.get('date',now.astimezone(JST).date().isoformat()))
-                except Exception: return 400,{'error':{'code':'invalid_calendar_query','message':'日付または表示範囲を確認してください'}}
             if path=='/api/v1/local-notifications':
                 if method!='GET' or query: return 400,{'error':{'code':'invalid_request'}}
                 return 200,notifications.current(now)
@@ -173,7 +185,7 @@ def serve(root: Path,*,container=False):
                 if method!='POST' or query or body!=b'{}': return 400,{'error':{'code':'invalid_request'}}
                 notifications.heartbeat(now); return 200,{'status':'ok'}
             return None
-        server=create_server('0.0.0.0' if container else '127.0.0.1',24873,root,bind_origin=ORIGINS[0],mutation_origins=ORIGINS,extra_handler=extra,health_details={'distribution':'mokvia','mode':'local'},strict_hosts=('localhost:24873','127.0.0.1:24873'))
+        server=create_server('0.0.0.0' if container else '127.0.0.1',24873,root,bind_origin=ORIGINS[0],mutation_origins=ORIGINS,extra_handler=extra,health_details={'distribution':'mokvia','mode':'local'},strict_hosts=('localhost:24873','127.0.0.1:24873'),capture_folder=capture_folder)
         stopped=threading.Event()
         def worker():
             while not stopped.is_set():
@@ -190,17 +202,20 @@ def serve(root: Path,*,container=False):
         print('mokvia ready at http://localhost:24873',flush=True)
         try: server.serve_forever()
         except KeyboardInterrupt: pass
-        finally: stopped.set(); thread.join(timeout=15); server.server_close()
+        finally:
+            stopped.set(); thread.join(timeout=15)
+            server.server_close()
 
 def main():
     parser=argparse.ArgumentParser(); sub=parser.add_subparsers(dest='command',required=True)
     sub.add_parser('init'); p=sub.add_parser('serve'); p.add_argument('--container',action='store_true')
+    p.add_argument('--capture-folder',type=Path,help='Explicit absolute read-only company handoff folder; disabled when omitted')
     p=sub.add_parser('backup'); p.add_argument('--output',type=Path,required=True)
     p=sub.add_parser('restore'); p.add_argument('--input',type=Path,required=True)
     args=parser.parse_args()
     try:
         if args.command=='init': initialize(DATA_ROOT)
-        elif args.command=='serve': serve(DATA_ROOT,container=args.container)
+        elif args.command=='serve': serve(DATA_ROOT,container=args.container,capture_folder=args.capture_folder)
         elif args.command=='backup': backup(DATA_ROOT,args.output)
         else: print('Pre-restore backup:',restore(DATA_ROOT,args.input))
     except Exception as error:

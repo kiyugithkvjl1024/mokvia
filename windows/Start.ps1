@@ -1,7 +1,14 @@
 # Run from a normal logged-in Windows session. Never changes execution policy.
+param([string]$CaptureFolder, [switch]$DisableCapture)
 . (Join-Path $PSScriptRoot 'Common.ps1')
 Assert-Docker
 Assert-NoLegacyData
+if ($PSBoundParameters.ContainsKey('CaptureFolder') -and $DisableCapture) {
+    throw 'Use CaptureFolder or DisableCapture, not both.'
+}
+if ($PSBoundParameters.ContainsKey('CaptureFolder')) { Set-CaptureConfiguration -Folder $CaptureFolder }
+elseif ($DisableCapture) { Set-CaptureConfiguration -Disable }
+Get-CaptureComposeOverride | Out-Null
 Assert-PortOwnership
 Invoke-Docker -Arguments @('volume', 'create', 'mokvia_data') | Out-Null
 Invoke-Compose -Arguments @('up', '-d', '--build') | Out-Host

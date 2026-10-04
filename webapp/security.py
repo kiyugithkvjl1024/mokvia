@@ -22,6 +22,7 @@ ALLOWED_MUTATION_ORIGIN = "http://127.0.0.1:24873"
 PRODUCT_HTTPS_ORIGIN = "http://localhost:24873"
 DEDICATED_PRODUCT_HTTPS_ORIGIN = "http://localhost:24873"
 PRODUCT_MUTATION_ORIGINS = ("http://localhost:24873", "http://127.0.0.1:24873")
+WEB_MARKER_HEADER = "X-Mokvia-Web"
 _ENTITY_ID_PATTERN = re.compile(r"[A-Za-z0-9_-]{1,100}", re.ASCII)
 _JSON_CONTENT_TYPE_PATTERN = re.compile(
     r"application/json[ \t]*(?:;[ \t]*charset[ \t]*=[ \t]*utf-8[ \t]*)?",
@@ -122,7 +123,7 @@ def validate_mutation_headers(
     if origin not in configured_origins:
         raise ForbiddenRequestError("mutation Origin is forbidden")
 
-    web_marker = _single_header(normalized, "X-Mokvia-Web", ForbiddenRequestError)
+    web_marker = _single_header(normalized, WEB_MARKER_HEADER, ForbiddenRequestError)
     if web_marker != "1":
         raise ForbiddenRequestError("mutation marker is forbidden")
 

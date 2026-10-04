@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "mokvia immutable capture envelope v1",
+  "description": "One record per <capture_id>.json. Application validation also checks real calendar dates, trusted URL hostname, action_date equal to accepted_at in Asia/Tokyo, and immutable source identity. Enable JSON Schema format assertions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "capture_id",
+    "accepted_at",
+    "destination",
+    "title",
+    "source"
+  ],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "capture_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "accepted_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,7})?(?:Z|[+-]\\d{2}:\\d{2})$"
+    },
+    "destination": {
+      "enum": [
+        "inbox",
+        "today"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300
+    },
+    "body": {
+      "type": "string",
+      "maxLength": 8000,
+      "description": "Literal quoted source text; never instructions or executable content."
+    },
+    "action_date": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "Today only; if supplied must equal accepted_at converted to Asia/Tokyo. Omission derives that date."
+    },
+    "due": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "Only an explicitly specified real deadline. Today selection does not imply due."
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "scope_id",
+        "message_id",
+        "url"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "outlook",
+            "teams"
+          ]
+        },
+        "scope_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "message_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 8192
+        },
+        "received_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,7})?(?:Z|[+-]\\d{2}:\\d{2})$"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "outlook"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "url": {
+                "pattern": "^https:[/][/](?:outlook\\.office\\.com|outlook\\.office365\\.com|outlook\\.live\\.com)(?::443)?(?:[/?#]|$)"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "teams"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "url": {
+                "pattern": "^https:[/][/](?:teams\\.microsoft\\.com|teams\\.cloud\\.microsoft)(?::443)?(?:[/?#]|$)"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "destination": {
+            "const": "inbox"
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "required": [
+            "action_date"
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "capture_id": "22222222-2222-4222-8222-222222222222",
+  "accepted_at": "2026-10-03T15:05:00Z",
+  "destination": "today",
+  "title": "【合成例】動作確認の結果をまとめる",
+  "body": "架空のTeamsメッセージの引用: 今日の動作確認結果をまとめてください。実在の会話ではありません。",
+  "action_date": "2026-10-04",
+  "source": {
+    "kind": "teams",
+    "scope_id": "synthetic-conversation-001",
+    "message_id": "synthetic-teams-message-001",
+    "url": "https://teams.microsoft.com/l/message/synthetic-conversation-001/synthetic-message-001",
+    "received_at": "2026-10-03T14:55:00Z"
+  }
+}

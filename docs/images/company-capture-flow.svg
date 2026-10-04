@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="550" viewBox="0 0 1180 550" role="img" aria-labelledby="title desc">
+<title id="title">会社内で完結するmokvia取り込み経路</title>
+<desc id="desc">会社Microsoft 365のOutlookとTeamsからPower Automate、会社OneDriveの受け渡しフォルダー、会社Windowsのmokviaへ。Task正本は会社PC内のDocker volume。個人Ubuntuは会社データ経路外。</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#335c4c"/></marker></defs>
+<rect width="1180" height="550" rx="18" fill="#f6f8f5"/>
+<g font-family="Noto Sans CJK JP, Yu Gothic, sans-serif" fill="#173b2d">
+<text x="32" y="42" font-size="26" font-weight="700">会社データは、会社テナントと会社PC内で扱う</text>
+<rect x="26" y="65" width="1128" height="358" rx="14" fill="#edf5ef" stroke="#b7cdc0"/>
+<text x="44" y="96" font-size="18" font-weight="700">会社環境</text>
+<g stroke="#88aa97" stroke-width="1.5" fill="white">
+<rect x="44" y="123" width="218" height="178" rx="12"/>
+<rect x="308" y="123" width="230" height="178" rx="12"/>
+<rect x="584" y="123" width="232" height="178" rx="12"/>
+<rect x="862" y="123" width="272" height="178" rx="12"/>
+<rect x="862" y="332" width="272" height="64" rx="10"/>
+</g>
+<g font-size="20" font-weight="700">
+<text x="64" y="158">Microsoft 365</text><text x="328" y="158">Power Automate</text>
+<text x="604" y="158">会社OneDrive</text><text x="882" y="158">会社Windows</text>
+</g>
+<g font-size="17">
+<text x="64" y="195">Outlook：カテゴリ</text><text x="64" y="224">Teams：メニュー選択</text><text x="64" y="265">利用者が取り込みを選ぶ</text>
+<text x="328" y="195">初回受理を台帳に固定</text><text x="328" y="224">同じIDで再試行</text><text x="328" y="265">1件 = 1 JSON</text>
+<text x="604" y="195">Incoming：受け渡し</text><text x="604" y="224">Accepted：受理台帳</text><text x="604" y="265">会社PCへ同期・常時保持</text>
+<text x="882" y="195">mokvia / localhost:24873</text><text x="882" y="224">読み取り専用で取り込む</text><text x="882" y="265">Inbox・今日・Calendar</text>
+<text x="882" y="358">Task正本：local Docker volume</text><text x="882" y="382">バックアップも会社内ローカル</text>
+</g>
+<g stroke="#335c4c" stroke-width="3" marker-end="url(#arrow)"><path d="M266 210 H301"/><path d="M542 210 H577"/><path d="M820 210 H855"/><path d="M998 305 V324"/></g>
+<rect x="26" y="450" width="1128" height="76" rx="12" fill="#fff8ed" stroke="#bba98a" stroke-dasharray="6 4"/>
+<text x="45" y="479" font-size="20" font-weight="700">個人Ubuntu：会社データ経路外</text>
+<text x="45" y="508" font-size="17">コードは共通。会社Task・JSON・台帳・ログ・バックアップを個人環境へ送らない。</text>
+</g></svg>

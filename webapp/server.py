@@ -52,6 +52,8 @@ _SHELL_ROUTES = frozenset(
     }
 )
 _STATIC_ROUTES = {
+    "/assets/local-capture.js": ("local-capture.js", "text/javascript; charset=utf-8"),
+    "/assets/local-capture.css": ("local-capture.css", "text/css; charset=utf-8"),
     "/assets/local-calendar.js": ("local-calendar.js", "text/javascript; charset=utf-8"),
     "/assets/local-calendar.css": ("local-calendar.css", "text/css; charset=utf-8"),
     "/assets/local-notifications.js": ("local-notifications.js", "text/javascript; charset=utf-8"),
@@ -83,6 +85,7 @@ _READ_API_ROUTES = frozenset(
     {
         "/api/v1/health",
         "/api/v1/calendar",
+        "/api/v1/capture-import/status",
         "/api/v1/local-notifications",
         "/api/v1/snapshot",
         "/api/v1/quick-start-suggestions",
@@ -123,10 +126,15 @@ class _Server(ThreadingHTTPServer):
         try:
             super().server_close()
         finally:
-            store = getattr(self, "_mokvia_store", None)
-            close = getattr(store, "close", None)
-            if callable(close):
-                close()
+            try:
+                importer = getattr(self, "_capture_importer", None)
+                if importer is not None:
+                    importer.close()
+            finally:
+                store = getattr(self, "_mokvia_store", None)
+                close = getattr(store, "close", None)
+                if callable(close):
+                    close()
 
 
 class _InvalidQuery(ValueError):
@@ -640,12 +648,18 @@ def create_server(
     health_details: Mapping[str, object] | None = None,
     expected_root_identity: tuple[int, int] | None = None,
     read_only: bool = False,
+    capture_folder: pathlib.Path | None = None,
     extra_handler: Callable | None = None,
     strict_hosts: tuple[str, ...] | None = None,
 ) -> ThreadingHTTPServer:
     """Create a closed-by-default threaded server over one long-lived Store."""
     from webapp.api import ApiState, handle
-    from webapp.store import Store
+    from webapp.store import Store, InputError
+    from webapp.local_calendar import calendar_projection, JST
+    from webapp.local_capture import CaptureImporter
+
+    if read_only and capture_folder is not None:
+        raise ValueError("capture cannot run in a read-only preview")
 
     configured_mutation_origins = (
         None
@@ -659,6 +673,7 @@ def create_server(
         # Prime from the Store's own inode-bound byte snapshot. Preflight may
         # have validated an earlier filesystem state and cannot seed this cache.
         store.repository_errors()
+        importer = CaptureImporter(root, capture_folder, bind_origin=bind_origin) if capture_folder is not None else None
     except BaseException:
         store.close()
         raise
@@ -677,6 +692,18 @@ def create_server(
             extra = extra_handler(*args[:6])
             if extra is not None:
                 return extra
+        _, method, path, query = args[:4]
+        if path == "/api/v1/capture-import/status":
+            if method != "GET" or query:
+                return 400, _error_payload("invalid_request", "GET without query is required")
+            return 200, importer.status() if importer is not None else {"enabled": False}
+        if path == "/api/v1/calendar":
+            if method != "GET" or set(query) - {"view", "date"} or any(not isinstance(v, str) for v in query.values()):
+                return 400, _error_payload("invalid_calendar_query", "日付または表示範囲を確認してください")
+            try:
+                return 200, calendar_projection(store, query.get("view", "month"), query.get("date", datetime.datetime.now(JST).date().isoformat()))
+            except InputError:
+                return 400, _error_payload("invalid_calendar_query", "日付または表示範囲を確認してください")
         kwargs["bind_origin"] = bind_origin
         kwargs["mutation_origins"] = configured_mutation_origins
         kwargs["health_details"] = health_details
@@ -704,6 +731,13 @@ def create_server(
     server._mokvia_store = store  # type: ignore[attr-defined]
     server._mokvia_api_state = api_state  # type: ignore[attr-defined]
     server._mokvia_log_lock = threading.Lock()  # type: ignore[attr-defined]
+    server._capture_importer = importer  # type: ignore[attr-defined]
+    if importer is not None:
+        try:
+            importer.start(store)
+        except BaseException:
+            server.server_close()
+            raise
     return server
 
 

@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "capture_id": "11111111-1111-4111-8111-111111111111",
+  "accepted_at": "2026-10-04T07:30:00+09:00",
+  "destination": "inbox",
+  "title": "【合成例】資料の確認依頼を整理する",
+  "body": "これは架空のOutlookメッセージの引用です。実在の会社・人物・メール本文を含みません。",
+  "source": {
+    "kind": "outlook",
+    "scope_id": "synthetic-mailbox-001",
+    "message_id": "synthetic-outlook-immutable-message-001",
+    "url": "https://outlook.office.com/mail/deeplink/read/synthetic-message-001",
+    "received_at": "2026-10-03T22:20:00Z"
+  }
+}
