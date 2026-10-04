@@ -76,7 +76,9 @@ function Write-AtomicCaptureJson {
     $temporary = Join-Path $script:StateDir ('capture-' + [Guid]::NewGuid().ToString('N') + '.tmp')
     try {
         [IO.File]::WriteAllText($temporary, ($Value | ConvertTo-Json -Depth 10), (New-Object Text.UTF8Encoding($false)))
-        if (Test-Path -LiteralPath $Path) { [IO.File]::Replace($temporary, $Path, $null) }
+        # PowerShell 5.1 converts $null to an empty string for a .NET string argument.
+        # Pass a true null backup path so replacing existing settings stays atomic.
+        if (Test-Path -LiteralPath $Path) { [IO.File]::Replace($temporary, $Path, [System.Management.Automation.Language.NullString]::Value) }
         else { [IO.File]::Move($temporary, $Path) }
     } finally {
         if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
