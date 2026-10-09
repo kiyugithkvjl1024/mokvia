@@ -64,7 +64,16 @@
   function createDestinationDock(destinations, point, label = "ここにドロップして移動") {
     const dock = document.createElement("div"), heading = document.createElement("p"), grid = document.createElement("div");
     dock.className = "drag-destination-dock"; dock.setAttribute("role", "region"); dock.setAttribute("aria-label", label); heading.textContent = label; grid.className = "drag-destination-grid";
-    for (const destination of destinations) { const target = document.createElement("div"); target.className = "drag-destination"; target.dataset.dragDestination = destination.key; target.textContent = destination.label; if (destination.danger) target.dataset.danger = "true"; grid.append(target); }
+    const groups = new Map();
+    for (const destination of destinations) {
+      let parent = grid;
+      if (destination.group) {
+        if (!groups.has(destination.group)) { const section = document.createElement(destination.group === "その他" ? "details" : "section"), heading = document.createElement(destination.group === "その他" ? "summary" : "h3"); heading.textContent = destination.group; section.className = "drag-operation-group"; section.append(heading); const row = document.createElement("div"); row.className = "drag-operation-row"; section.append(row); grid.append(section); groups.set(destination.group, row); }
+        parent = groups.get(destination.group);
+      }
+      const target = document.createElement("div"); target.className = "drag-destination"; target.dataset.dragDestination = destination.key; target.textContent = destination.label; if (destination.danger) target.dataset.danger = "true"; parent.append(target);
+    }
+    if (groups.size) dock.classList.add("drag-operation-dock");
     dock.append(heading, grid); document.body.append(dock);
     const rect = dock.getBoundingClientRect(), width = window.innerWidth || 390, height = window.innerHeight || 844, below = point.clientY + 32;
     dock.style.left = Math.max(16, Math.min(width - rect.width - 16, point.clientX - rect.width / 2)) + "px";
@@ -73,7 +82,9 @@
   }
   function destinationAt(dock, point) {
     if (!dock) return "";
-    const hit = document.elementFromPoint(point.clientX, point.clientY), target = hit && hit.closest ? hit.closest("[data-drag-destination]") : null, targets = [...dock.children[1].children];
+    const hit = document.elementFromPoint(point.clientX, point.clientY), target = hit && hit.closest ? hit.closest("[data-drag-destination]") : null;
+    const disclosure = hit && hit.closest ? hit.closest("summary") : null; if (disclosure && dock.contains(disclosure)) disclosure.parentNode.open = true;
+    const targets = dock.querySelectorAll ? [...dock.querySelectorAll("[data-drag-destination]")] : [...dock.children[1].children];
     for (const value of targets) value.dataset.active = String(value === target);
     return targets.includes(target) ? target.dataset.dragDestination : "";
   }
