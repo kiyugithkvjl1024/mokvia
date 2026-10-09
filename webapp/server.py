@@ -52,6 +52,10 @@ _SHELL_ROUTES = frozenset(
     }
 )
 _STATIC_ROUTES = {
+    "/assets/timetracker-nx.js": ("timetracker-nx.js", "text/javascript; charset=utf-8"),
+    "/assets/timetracker-nx.css": ("timetracker-nx.css", "text/css; charset=utf-8"),
+    "/assets/integration-settings.js": ("integration-settings.js", "text/javascript; charset=utf-8"),
+    "/assets/outlook-import.js": ("outlook-import.js", "text/javascript; charset=utf-8"),
     "/assets/local-capture.js": ("local-capture.js", "text/javascript; charset=utf-8"),
     "/assets/local-capture.css": ("local-capture.css", "text/css; charset=utf-8"),
     "/assets/local-calendar.js": ("local-calendar.js", "text/javascript; charset=utf-8"),
@@ -79,12 +83,15 @@ _STATIC_ROUTES = {
     "/assets/local-background.svg": ("local-background.svg", "image/svg+xml"),
 }
 _MUTATION_ROUTES = frozenset(
-    {"/api/v1/mutations/preview", "/api/v1/mutations/apply", "/api/v1/local-notifications/heartbeat"}
+    {"/api/v1/mutations/preview", "/api/v1/mutations/apply", "/api/v1/local-notifications/heartbeat", "/api/v1/outlook-import/run", "/api/v1/outlook-import/local", "/api/v1/integrations/settings", "/api/v1/integrations/actual-write", "/api/v1/integrations/actual-preview", "/api/v1/integrations/actual-apply", "/api/v1/integrations/actual-reconcile", "/api/v1/integrations/task"}
 )
 _READ_API_ROUTES = frozenset(
     {
         "/api/v1/health",
         "/api/v1/calendar",
+        "/api/v1/outlook-import/status",
+        "/api/v1/integrations/status",
+        "/api/v1/actuals",
         "/api/v1/capture-import/status",
         "/api/v1/local-notifications",
         "/api/v1/snapshot",
@@ -649,16 +656,24 @@ def create_server(
     expected_root_identity: tuple[int, int] | None = None,
     read_only: bool = False,
     capture_folder: pathlib.Path | None = None,
+    outlook_folder: pathlib.Path | None = None,
+    outlook_collector: object | None = None,
+    integration_specs=None,
+    integration_options=None,
+    integration_availability=None,
+    integration_services=None,
     extra_handler: Callable | None = None,
     strict_hosts: tuple[str, ...] | None = None,
+    timetracker_config: pathlib.Path | None = None,
 ) -> ThreadingHTTPServer:
     """Create a closed-by-default threaded server over one long-lived Store."""
     from webapp.api import ApiState, handle
     from webapp.store import Store, InputError
     from webapp.local_calendar import calendar_projection, JST
     from webapp.local_capture import CaptureImporter
+    from webapp.outlook_import import OutlookImport, ImportError as OutlookImportError
 
-    if read_only and capture_folder is not None:
+    if read_only and (capture_folder is not None or outlook_folder is not None or outlook_collector is not None):
         raise ValueError("capture cannot run in a read-only preview")
 
     configured_mutation_origins = (
@@ -674,6 +689,32 @@ def create_server(
         # have validated an earlier filesystem state and cannot seed this cache.
         store.repository_errors()
         importer = CaptureImporter(root, capture_folder, bind_origin=bind_origin) if capture_folder is not None else None
+        outlook = OutlookImport(root, outlook_folder, collector=outlook_collector)
+    except BaseException:
+        store.close()
+        raise
+    try:
+        from webapp.integrations.registry import Registry
+        from webapp.integrations.reflections import ActualCatalog, ReflectionService
+        from webapp.integrations.state import IntegrationError
+        from webapp.timetracker_nx import NXError, ResultUnknown
+        from webapp.integration_plugins.outlook import saved_actuals, saved_events
+        services={"outlook_events":outlook, **(integration_services or {})}
+        if timetracker_config is not None:
+            from webapp.timetracker_nx_transport import load_integration_configuration
+            if "timetracker_nx_transport" in services or (integration_options or {}).get("timetracker_nx"):
+                raise NXError("configuration_invalid")
+            nx_options,nx_services=load_integration_configuration(timetracker_config)
+            integration_options={**(integration_options or {}),**nx_options}
+            services.update(nx_services)
+        if "google_status" not in services:
+            def google_status():
+                from calendar_sync.status import read_calendar_sync_status
+                return read_calendar_sync_status(runtime_root=pathlib.Path(root)/"private"/"calendar-sync")
+            services["google_status"]=google_status
+        registry=Registry(root,services=services,options=integration_options,availability=integration_availability,specs=integration_specs)
+        actual_catalog=ActualCatalog(store,[lambda:saved_actuals(outlook)])
+        reflections=ReflectionService(registry,actual_catalog)
     except BaseException:
         store.close()
         raise
@@ -697,11 +738,54 @@ def create_server(
             if method != "GET" or query:
                 return 400, _error_payload("invalid_request", "GET without query is required")
             return 200, importer.status() if importer is not None else {"enabled": False}
+        if path in {"/api/v1/integrations/status", "/api/v1/actuals", "/api/v1/integrations/settings", "/api/v1/integrations/actual-write", "/api/v1/integrations/actual-preview", "/api/v1/integrations/actual-apply", "/api/v1/integrations/actual-reconcile", "/api/v1/integrations/task"}:
+            try:
+                if method=="GET" and path=="/api/v1/integrations/status" and not query:return 200,registry.statuses()
+                if method=="GET" and path=="/api/v1/actuals" and not query:
+                    records=list(actual_catalog.read().values())
+                    writers=[name for name,spec in registry.specs.items() if "actual.write" in spec.capabilities]
+                    return 200,{"actuals":[record.to_dict() for record in records],"reflection":{name:[reflections.status(name,record) for record in records] for name in writers}}
+                if method!="POST" or query:raise IntegrationError("invalid_request")
+                if store.read_snapshot().recovery_required:raise IntegrationError("recovery_required")
+                operation=json.loads(args[5])
+                if path=="/api/v1/integrations/settings" and isinstance(operation,dict) and set(operation)=={"id","enabled","revision"}:
+                    return 200,registry.state.set_enabled(operation["id"],operation["enabled"],operation["revision"])
+                if path=="/api/v1/integrations/actual-preview" and isinstance(operation,dict) and set(operation)=={"id","references"}:
+                    return 200,reflections.preview(operation["id"],operation["references"])
+                if path=="/api/v1/integrations/actual-apply" and isinstance(operation,dict) and set(operation)=={"id","references","token"}:
+                    return 200,reflections.apply(operation["id"],operation["references"],operation["token"])
+                if path=="/api/v1/integrations/actual-reconcile" and isinstance(operation,dict) and set(operation)=={"id","reference_id"}:
+                    return 200,reflections.reconcile(operation["id"],operation["reference_id"])
+                if path=="/api/v1/integrations/task" and isinstance(operation,dict) and set(operation)=={"id","reference_id","task_url","work_item_id","categories"}:
+                    return 200,reflections.register_task(operation["id"],operation["reference_id"],operation["task_url"],operation["work_item_id"],operation["categories"])
+                if path=="/api/v1/integrations/actual-write":
+                    raise IntegrationError("preview_required")
+                raise IntegrationError("invalid_request")
+            except (IntegrationError, NXError, ValueError,TypeError,KeyError,ResultUnknown) as error:
+                code=str(error) if isinstance(error,IntegrationError) else error.code if isinstance(error,NXError) else "unknown" if isinstance(error,ResultUnknown) else "invalid_request"
+                return (409 if code in {"busy","conflict","stale_preview","reflection_requires_readback"} else 400),_error_payload(code,"連携状態を確認してください。")
+        if path.startswith("/api/v1/outlook-import/"):
+            try:
+                if query: raise OutlookImportError("invalid_request")
+                if path == "/api/v1/outlook-import/status" and method == "GET":
+                    return 200, {**outlook.status(), "enabled":outlook.status()["enabled"] and registry.state.enabled("outlook"), "plugin_enabled":registry.state.enabled("outlook")}
+                if method != "POST": raise OutlookImportError("invalid_request")
+                if store.read_snapshot().recovery_required: raise OutlookImportError("recovery_required")
+                operation = json.loads(args[5])
+                if not isinstance(operation, dict): raise OutlookImportError("invalid_request")
+                if path == "/api/v1/outlook-import/run" and set(operation) == {"source", "from", "to"}:
+                    return 200, registry.require("outlook","calendar.read").fetch_calendar(operation["source"], operation["from"], operation["to"])
+                if path == "/api/v1/outlook-import/local" and {"key", "revision", "done"} <= set(operation) and not set(operation)-{"key", "revision", "done", "actual", "undo"}:
+                    return 200, outlook.annotate(operation["key"], operation["revision"], operation["done"], actual=operation.get("actual"), undo=operation.get("undo"))
+                raise OutlookImportError("invalid_request")
+            except (OutlookImportError, IntegrationError, ValueError, TypeError, KeyError) as error:
+                code = str(error) if isinstance(error, (OutlookImportError,IntegrationError)) else "invalid_request"
+                return (409 if code in {"busy", "conflict"} else 400), _error_payload(code, "取り込みを保存できませんでした。状態を再読込してください。")
         if path == "/api/v1/calendar":
             if method != "GET" or set(query) - {"view", "date"} or any(not isinstance(v, str) for v in query.values()):
                 return 400, _error_payload("invalid_calendar_query", "日付または表示範囲を確認してください")
             try:
-                return 200, calendar_projection(store, query.get("view", "month"), query.get("date", datetime.datetime.now(JST).date().isoformat()))
+                return 200, calendar_projection(store, query.get("view", "month"), query.get("date", datetime.datetime.now(JST).date().isoformat()), external=saved_events(outlook))
             except InputError:
                 return 400, _error_payload("invalid_calendar_query", "日付または表示範囲を確認してください")
         kwargs["bind_origin"] = bind_origin

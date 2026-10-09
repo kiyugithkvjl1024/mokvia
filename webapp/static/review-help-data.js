@@ -3,20 +3,20 @@
 window.ReviewHelp = Object.freeze({
   daily: {
     title: "Daily Review（5〜10分）",
-    purpose: "その日の判断を始める前に、未整理の気がかり、進行中の仕事、7日以内の予定・期限を確認し、今日引き受ける約束を実行可能な量に絞ります。",
-    alt: "Inbox確認からDaily Reviewを記録するまでの5段階の流れ",
-    flow: ["Inbox確認", "Doing・7日内を確認", "今日やる／やらないを判断", "今日の約束を確定", "Daily Reviewを記録"],
+    purpose: "いまの状況に合わせて気がかりと直近の予定を確認し、必要な変更を反映します。朝は今日の約束を整え、夜は残ったことと次の行動を確認します。全リストの棚卸しはWeeklyで行います。",
+    alt: "Inbox・直近の予定を確認する従来のDaily Review参考図。現在の操作手順は下のテキスト参照",
+    flow: ["変化・気がかりを整理", "予定と次の行動を確認", "必要ならひとこと", "確認状況を保存して終了"],
     steps: [
-      {label: "Inbox確認", purpose: "未整理の気がかりを見落とさないため。", action: "Inboxを見渡し、今日判断が必要なものと、後で明確化するものを分けます。"},
-      {label: "Doing・7日内を確認", purpose: "進行中の仕事と直近の日付項目の衝突を先に見つけるため。", action: "Doing、Scheduled、dueを見て、今日対応しないと困るものを特定します。"},
-      {label: "今日やる／やらないを判断", purpose: "候補を全部抱えず、今日の容量に収めるため。", action: "各候補を今日やるか今日はやらないかに分け、曖昧な保留を減らします。"},
-      {label: "今日の約束を確定", purpose: "希望ではなく、実行可能な約束として固定するため。", action: "所要時間と予定を見比べ、今日やるものだけをNotesへ記録します。"},
-      {label: "Daily Reviewを記録", purpose: "判断結果を残し、翌日の見直しにつなげるため。", action: "確認状態とNotesを見直し、Daily Reviewを保存して保存完了を確認します。"},
+      {label: "変化・気がかりを整理", purpose: "現実と記録のずれを減らすため。", action: "新しい気がかりはInboxへ、完了や変更は該当Taskへ反映します。実績台帳に残したい事実だけProgressへ任意で記録します。記録済み事項の転記は不要です。"},
+      {label: "予定と次の行動を確認", purpose: "今と次の約束を実行可能にするため。", action: "Inbox、Doing、今日から7日内の予定・期限を見ます。必要なら振分け、対応予定日、次の行動を画面内で更新します。朝は今日、夜は次に取り組むことを整えます。"},
+      {label: "必要ならひとこと", purpose: "次に役立つ気づきだけ残すため。", action: "『進んだこと／引っかかり／次の一手』の必要分を1行だけ。例：『返信待ち。返答が来たら資料を更新する』。Notesは任意で、空欄でも保存できます。"},
+      {label: "確認状況を保存して終了", purpose: "何を確認したか残し、見直しを閉じるため。", action: "確認した項目にチェックし、最後に『確認状況を保存』を押して保存完了を確認します。変更不要なら何も更新しなくて構いません。"},
+      {label: "時間がない日の2分版", purpose: "最低限の信頼を保つため。", action: "新しい気がかりをInboxへ入れる → 次の予定と期限を確認 → 今すぐ必要な一件だけ更新 → 確認した項目を保存。任意のProgressとNotesは省略できます。"},
     ],
-    example: ["期限が近い資料を今日やる。", "できるだけ頑張る。", "今日やらない候補は、Notesへ残します。"],
-    stuck: "判断できないInboxは、次に誰へ何を確認するかだけ決めて残します。",
-    done: "InboxとDoing・7日内を確認し、実行可能な今日の約束をNotesへ確定して、Daily Reviewの保存完了を確認できた。",
-    back: "/reviews/weekly",
+    example: ["朝：期限の近いTaskを今日の予定に入れる。夜：終わったTaskを完了し残りの次の行動を決める。変更なし：確認した項目だけチェックしてNotes空欄で保存する。", "全タスクを毎日見直す、長い日記を書く、記録済みの変更をNotesへ転記する。", "『進んだ／詰まった／次の一手』やif–thenを日次の任意メモに使うのはmokviaの提案です。Dラボの週次実践をGTD公式の日次必須手順とは扱いません。"],
+    stuck: "判断できない一件は、次に誰へ何を確認するか決めてInboxやTaskへ残します。全部解決するまで終えない運用にしません。",
+    done: "気がかりと直近の予定・次の行動を確認し、必要な変更を反映して、確認状況の保存完了が見えた。ProgressとNotesの記入は任意です。",
+    back: "/reviews/weekly?tab=daily",
   },
   weekly: {
     title: "Weekly Review（30〜45分）",
@@ -37,7 +37,7 @@ window.ReviewHelp = Object.freeze({
     back: "/reviews/weekly?tab=weekly",
   },
   progress: {
-    title: "Progressの詳しいやり方", image: "/assets/progress.png", size: [1536, 1024],
+    title: "Progressの詳しいやり方",
     alt: "人が小さな変化を記録し、Weeklyで意味・紐づけ・証拠を補完してmokviaへ蓄積する。mokviaは月次実績台帳Markdownへ整形し、人が用途別に選択・言い換えて、実績報告・職務経歴書・面接・ライフプランへ分岐する流れ。",
     flow: ["人が小さな変化を記録する", "mokviaが原子的な事実として蓄積する", "Weeklyで意味・紐づけ・証拠を補完し、蓄積へ戻す", "mokviaが月次実績台帳Markdownへ整形する", "人が用途別に選択・言い換える", "実績報告・職務経歴書・面接・ライフプランへ分岐する"],
     steps: [
@@ -55,3 +55,21 @@ window.ReviewHelp = Object.freeze({
     back: "/reviews/weekly",
   },
 });
+
+window.ReviewHelpUI = {
+  layout(e, kind, editing = false) {
+    const daily = kind === "daily", guide = e.reviewGuide, progress = document.getElementById("progress-review"), past = document.getElementById("review-history"), home = guide && guide.parentNode;
+    if (home && progress && past) {
+      if (daily) { home.insertBefore(progress, guide); home.insertBefore(e.reviewDisclosure, past); if (e.reviewSaveStatus) home.insertBefore(e.reviewSaveStatus, past); }
+      else { home.insertBefore(guide, progress); home.insertBefore(past, e.reviewDisclosure); }
+    }
+    const recordDetails = document.getElementById("review-record-details"); if (recordDetails) recordDetails.open = editing || !daily;
+    const progressEntry = document.getElementById("progress-entry"); if (progressEntry) { progressEntry.hidden = !daily; if (e.progressCancel && !e.progressCancel.hidden) progressEntry.open = true; }
+    const summary = e.reviewDisclosure?.querySelector("summary"), heading = document.getElementById("review-guide-heading"), help = document.getElementById("review-notes-help");
+    if (summary) summary.textContent = daily ? "3. 確認を終えて保存" : "＋ Weekly Reviewを記録";
+    if (heading) heading.textContent = daily ? "2. 予定と次の行動を確認" : "Weekly Reviewの進め方";
+    if (progress) { document.getElementById("progress-review-heading").textContent = daily ? "1. 変化を整理する" : "今日の変化を記録"; document.getElementById("progress-purpose").textContent = daily ? "新しい気がかりや変更はInbox・Taskへ反映。実績台帳に残したい事実があれば、ここで記録します（任意）。記録済み事項の転記は不要です。" : "小さな変化を、あとで使える事実として残します。"; }
+    if (!editing) { e.reviewBodyLabel.textContent = daily ? "ひとこと振返り（任意）" : "メモ"; e.reviewBody.rows = daily ? 3 : 8; e.reviewBody.placeholder = daily ? "例：返信待ち。返答が来たら資料を更新する。" : ""; e.reviewPreview.textContent = daily ? "確認状況を保存" : "作成"; }
+    if (help) help.hidden = !daily || editing;
+  }
+};

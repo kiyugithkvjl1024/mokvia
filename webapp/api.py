@@ -646,7 +646,7 @@ def _plan_operation(
         _require_exact_keys(
             request,
             {"action", "kind", "id", "base_hash", "fields"},
-            {"body"},
+            {"body", "confirm_blocked_next"},
         )
         kind, entity_type = _operation_kind(request["kind"])
         if kind == "time_allocation_plans":
@@ -657,13 +657,22 @@ def _plan_operation(
         body = request.get("body")
         if body is not None and not isinstance(body, str):
             raise InputError("mutation body is invalid")
+        confirm_blocked_next = request.get("confirm_blocked_next", False)
+        if type(confirm_blocked_next) is not bool:
+            raise InputError("blocked Next confirmation must be boolean")
         try:
-            plan = store.plan_update_entity(current.entity_id, base_hash, fields, body)
+            plan = store.plan_update_entity(
+                current.entity_id,
+                base_hash,
+                fields,
+                body,
+                confirm_blocked_next=confirm_blocked_next,
+            )
         except ConflictError as error:
             if error.current.entity_type != entity_type:
                 raise NotFoundError("entity was not found") from None
             raise
-        return plan, {
+        operation: dict[str, object] = {
             "action": "update",
             "kind": kind,
             "id": current.entity_id,
@@ -671,6 +680,9 @@ def _plan_operation(
             "fields": dict(fields),
             "body": body,
         }
+        if confirm_blocked_next:
+            operation["confirm_blocked_next"] = True
+        return plan, operation
 
     if action == "archive":
         _require_exact_keys(request, {"action", "kind", "id", "base_hash"})

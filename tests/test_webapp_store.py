@@ -5349,6 +5349,35 @@ class StoreTaskWorkflowTest(unittest.TestCase):
             proposed = [effect.planned_entity.frontmatter for effect in plan.effects]
             self.assertEqual([item["status"] for item in proposed], ["next", "planned"])
 
+    def test_confirmed_project_child_next_preserves_dependency_and_only_changes_status(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.make_repository(pathlib.Path(temporary))
+            store = Store(root)
+            project = self.create_project(store)
+            first = self.create_task(store, "First", "next", project_id=project.entity_id, project_position="1")
+            second = self.create_task(store, "Second", "waiting", project_id=project.entity_id, project_position="1", depends_on=f"[{first.entity_id}]", action_date="2026-07-19")
+            with mock.patch("webapp.store.current_time", return_value=self.NOW):
+                ordinary = store.plan_update_entity(second.entity_id, second.content_hash, {"status": "next"}, None)
+                self.assertEqual(ordinary.planned_entity.frontmatter["status"], "waiting")
+                confirmed = store.plan_update_entity(second.entity_id, second.content_hash, {"status": "next"}, None, confirm_blocked_next=True)
+                self.assertEqual(confirmed.planned_entity.frontmatter["status"], "next")
+                self.assertEqual(confirmed.planned_entity.frontmatter["depends_on"], f"[{first.entity_id}]")
+                self.assertEqual(confirmed.planned_entity.frontmatter["action_date"], "2026-07-19")
+                edited = store.plan_update_entity(second.entity_id, second.content_hash, {"status": "next", "title": "Changed"}, "Edited body", confirm_blocked_next=True)
+                self.assertEqual(edited.planned_entity.frontmatter["status"], "next")
+                self.assertEqual(edited.planned_entity.frontmatter["title"], "Changed")
+                with self.assertRaisesRegex(InputError, "preserve"):
+                    store.plan_update_entity(second.entity_id, second.content_hash, {"status": "next", "depends_on": "[]"}, None, confirm_blocked_next=True)
+                store.apply_mutation_plan(confirmed)
+                second_now = store.get_entity(second.entity_id)
+                with self.assertRaisesRegex(InputError, "dependenc"):
+                    store.plan_task_start(second_now.entity_id, second_now.content_hash)
+                first_now = store.get_entity(first.entity_id)
+                store.apply_mutation_plan(store.plan_update_entity(first_now.entity_id, first_now.content_hash, {"status": "done"}, None))
+            second_after = store.get_entity(second.entity_id)
+            self.assertEqual(second_after.frontmatter["status"], "next")
+            self.assertEqual(second_after.frontmatter["depends_on"], f"[{first.entity_id}]")
+
     def test_project_task_plan_update_atomically_updates_creates_and_archives(self) -> None:
         """Catches the full-tree editor splitting one save into partial mutations."""
         with tempfile.TemporaryDirectory() as temporary:

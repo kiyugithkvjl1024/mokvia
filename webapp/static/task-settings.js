@@ -267,8 +267,31 @@
     });
   }
 
+  async function confirmBlockedNext(operation, request, isCurrent, knownTask) {
+    if (!operation || operation.action !== "update" || operation.kind !== "tasks" || !operation.fields || operation.fields.status !== "next" || operation.confirm_blocked_next === true) return operation;
+    if (operation.fields.project_id === "" || (own(operation.fields, "depends_on") && !dependencyIds(operation.fields.depends_on).length)) return operation;
+    if (knownTask && knownTask.id === operation.id && knownTask.content_hash === operation.base_hash && !dependencyIds((knownTask.frontmatter || {}).depends_on).length) return operation;
+    const detail = await request("/api/v1/entities/tasks/" + encodeURIComponent(operation.id));
+    const fields = detail.frontmatter || {}, dependencies = dependencyIds(fields.depends_on);
+    if (fields.status === "next" || !fields.project_id || !dependencies.length) return operation;
+    const snapshot = await request("/api/v1/snapshot"), byId = new Map(snapshot.entities.map((entity) => [entity.id, entity]));
+    if (dependencies.every((id) => byId.has(id) && byId.get(id).frontmatter.status === "done")) return operation;
+    if (isCurrent && !isCurrent()) return null;
+    if (!globalThis.confirm("前提Taskが未完了です。Nextとして計画に残しますが、すべての前提が完了するまで開始できません。続けますか？")) return null;
+    return {...operation, confirm_blocked_next: true};
+  }
+
+  function previewNeedsConfirmation(previewResponse) {
+    const operation = previewResponse && previewResponse.operation;
+    if (operation && (operation.action === "archive" || operation.action === "cycle_close")) return true;
+    if (Array.isArray(previewResponse && previewResponse.effects)) return previewResponse.effects.some((effect) => effect && (effect.role === "project_archived" || effect.role === "task_archived"));
+    return Boolean(previewResponse && previewResponse.proposed && previewResponse.proposed.archived === true);
+  }
+
   return Object.freeze({
     GROUPS,
+    confirmBlockedNext,
+    previewNeedsConfirmation,
     availableFromParts,
     availableFromValue,
     formatAvailableFrom,

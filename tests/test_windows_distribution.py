@@ -52,6 +52,15 @@ class WindowsDistributionTest(unittest.TestCase):
         self.assertIn("$health.distribution -eq 'mokvia'", source)
         self.assertIn("$health.status -eq 'ok'", source)
 
+    def test_nx_profile_uses_reference_only_readonly_mount_and_skips_maintenance(self):
+        source=(ROOT/'windows/Common.ps1').read_text()
+        start=(ROOT/'windows/Start.ps1').read_text()
+        for required in ('TimeTrackerConfigFile','DisableTimeTracker','Set-TimeTrackerConfiguration','Get-TimeTrackerComposeOverride'):
+            self.assertIn(required,start)
+        for required in ('timetracker-reference.json','/nx-config/profile.json','read_only=$true','create_host_path=$false',"if ($Maintenance) { return $null }",'credential_env','company_approved'):
+            self.assertIn(required,source)
+        self.assertNotIn('GetEnvironmentVariable',source)
+
     @unittest.skipUnless(shutil.which('pwsh'), 'PowerShell unavailable on this Linux host')
     def test_powershell_parser(self):
         for script in list((ROOT / 'windows').glob('*.ps1')) + [ROOT / 'tests/windows-startup.ps1']:

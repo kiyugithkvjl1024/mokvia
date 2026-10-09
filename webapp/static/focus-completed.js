@@ -85,5 +85,17 @@
     return !startError && !endError ? {work_started_at: start, work_ended_at: end} : null;
   }
 
-  root.FocusCompleted = Object.freeze({isToday, normalizeMode, select, workSessionTimestamp, tokyoDateTimeLocal, tokyoNowDateTimeLocal, taskSwitchWorkEnd, taskSwitchTiming, configureTaskSwitchTime, readTaskSwitchTime, validateWorkSession});
+  function bindTodayAddDialog(byId, gated, busy) {
+    const dialog = byId("focus-today-add-dialog"), open = byId("focus-today-add-open"), cancel = byId("focus-today-add-cancel"), input = byId("focus-today-add-title"), error = byId("focus-today-add-error");
+    function clearError() { if (error) { error.textContent = ""; error.hidden = true; } }
+    function failed() { if (error) { error.textContent = "追加を確認できませんでした。入力は保持しています。"; error.hidden = false; } }
+    function close() { dialog.close(); }
+    function dismiss() { if (busy()) return; close(); open.focus(); }
+    if (open) open.addEventListener("click", () => { if (gated()) return; clearError(); dialog.showModal(); input.focus(); });
+    if (cancel) cancel.addEventListener("click", dismiss);
+    if (dialog) dialog.addEventListener("cancel", (event) => { event.preventDefault(); dismiss(); });
+    return {close, clearError, failed};
+  }
+  function reviewSaved(status, applied) { status.textContent = "Reviewを保存しました: " + applied.path; status.hidden = false; }
+  root.FocusCompleted = Object.freeze({bindTodayAddDialog, reviewSaved, isToday, normalizeMode, select, workSessionTimestamp, tokyoDateTimeLocal, tokyoNowDateTimeLocal, taskSwitchWorkEnd, taskSwitchTiming, configureTaskSwitchTime, readTaskSwitchTime, validateWorkSession});
 })(window);

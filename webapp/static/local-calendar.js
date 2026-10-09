@@ -106,10 +106,11 @@
           button('＋ 予定',()=>edit(null,day.date),cell);
           for(const item of day.events){
             const row=el('div','',cell);row.className='calendar-event calendar-'+item.kind;
-            const labels={planned:'予定',actual:'実績',action:'行動日',deadline:'期限'};
+            const labels={planned:'予定',actual:'実績',action:'行動日',deadline:'期限',external:'外部予定'};
             const clock=value=>value.slice(11,16);
             const time=item.all_day?'':clock(item.start)+'–'+(item.end.slice(0,10)!==day.date?'24:00':clock(item.end));
             el('span',labels[item.kind]+' '+time+(item.provisional?'（計測中）':''),row);
+            if(item.external){const renderer=root.IntegrationRenderers?.[item.provider_id];if(renderer){row.remove();renderer.render(item,cell,day.date,view.value);}else el('span',item.title,row);continue;}
             const link=el('a',item.title,row);link.href='/clarify?id='+encodeURIComponent(item.id);
             if(['planned','action','deadline'].includes(item.kind)&&!['doing','done'].includes(item.status))button('予定変更',()=>edit((snapshot.entities||[]).find(e=>e.id===item.id),day.date),row);
           }
@@ -117,6 +118,7 @@
         message.textContent=projection.mutation_state?.recovery_required?'復旧待ちです。状態画面を確認してください。':'予定は青、実績は緑、期限は赤で表示します。';
       }catch(e){if(token===generation)message.textContent=e.message;}
     }
+    section.addEventListener('outlook-import-updated',load);
     date.addEventListener('change',load);view.addEventListener('change',load);
     (document.querySelector('main')||document.body).append(section);load();
   });

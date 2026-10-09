@@ -65,9 +65,29 @@ def _archive(root: Path, output: Path):
                     member.size=len(raw); member.mode=0o600
                     tar.addfile(member,__import__('io').BytesIO(raw))
 
+    from webapp.outlook_import import OutlookImport
+    outlook=OutlookImport(root)
+    if (outlook.directory/'state.json').exists() or (outlook.directory/'state.json').is_symlink():
+        outlook.state()  # Validate before exporting; no handoff files or credentials.
+        raw=(outlook.directory/'state.json').read_bytes()
+        with tarfile.open(output,'a') as tar:
+            member=tarfile.TarInfo('.local-state/outlook-import/state.json');member.size=len(raw);member.mode=0o600
+            tar.addfile(member,__import__('io').BytesIO(raw))
+
+    from webapp.integrations.state import IntegrationState
+    with tarfile.open(output,'a') as tar:
+        for path in IntegrationState(root).snapshot_files():
+            raw=path.read_bytes();member=tarfile.TarInfo(str(path.relative_to(root)));member.size=len(raw);member.mode=0o600
+            tar.addfile(member,__import__('io').BytesIO(raw))
+
 def backup(root: Path, output: Path):
     initialize(root)
-    with runtime_claim(root), contextlib.closing(Store(root)) as store, store.mutation_lock():
+    from webapp.outlook_import import OutlookImport
+    from webapp.integrations.state import IntegrationState
+    from webapp.timetracker_nx import Journal
+    nx_path=IntegrationState(root).directory/'timetracker-nx.json'
+    nx_lock=Journal(nx_path).exclusive() if nx_path.exists() else contextlib.nullcontext()
+    with runtime_claim(root), contextlib.closing(Store(root)) as store, store.mutation_lock(), OutlookImport(root).lock(), IntegrationState(root).lock(), nx_lock:
         errors=validate_repository(root)
         if errors: raise ValueError('data validation failed; backup refused')
         output.parent.mkdir(parents=True,exist_ok=True)
@@ -87,7 +107,8 @@ def restore(root: Path, archive: Path):
                 seen.add(member.name)
                 valid=any(p.is_relative_to(Path(d)) for d in DIRECTORIES) and p.suffix=='.md'
                 receipt=re.fullmatch(r'\.local-state/capture-receipts/[0-9a-f]{64}\.json',member.name)
-                if not valid and member.name!='.webapp-mutation-state' and not receipt: raise ValueError('unexpected archive member')
+                integration=re.fullmatch(r'\.local-state/integrations/(?:settings|timetracker-nx|receipt-[0-9a-f]{64})\.json',member.name)
+                if not valid and not integration and member.name!='.webapp-mutation-state' and not receipt and member.name!='.local-state/outlook-import/state.json': raise ValueError('unexpected archive member')
             tar.extractall(staging,members=members,filter='data')
         if validate_repository(staging): raise ValueError('restored data fails schema validation')
         recovery=staging/'.webapp-mutation-state'
@@ -96,6 +117,10 @@ def restore(root: Path, archive: Path):
         staged_receipts=staging/'.local-state/capture-receipts'
         if staged_receipts.exists():
             with directory(staged_receipts) as fd: receipt_records(fd)
+        from webapp.outlook_import import OutlookImport
+        OutlookImport(staging).state()
+        from webapp.integrations.state import IntegrationState
+        IntegrationState(staging).snapshot_files()
         with contextlib.closing(Store(root)) as store,store.mutation_lock():
             stamp=dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
             safety=root/'.local-state'/f'pre-restore-{stamp}.tar'; _archive(root,safety)
@@ -111,6 +136,14 @@ def restore(root: Path, archive: Path):
             target_receipts=root/'.local-state/capture-receipts'
             if target_receipts.exists(): shutil.rmtree(target_receipts)
             if staged_receipts.exists(): shutil.copytree(staged_receipts,target_receipts)
+            target_outlook=root/'.local-state/outlook-import'
+            staged_outlook=staging/'.local-state/outlook-import'
+            if target_outlook.exists(): shutil.rmtree(target_outlook)
+            if staged_outlook.exists(): shutil.copytree(staged_outlook,target_outlook)
+            target_integrations=root/'.local-state/integrations'
+            staged_integrations=staging/'.local-state/integrations'
+            if target_integrations.exists():shutil.rmtree(target_integrations)
+            if staged_integrations.exists():shutil.copytree(staged_integrations,target_integrations)
             marker.unlink()
         return safety
 
@@ -169,7 +202,7 @@ def tick(store,notifications,now):
     except (TypeError,ValueError): text='開始時刻未記録'
     notifications.publish(f'focus:{task.entity_id}:{slot}',text,now)
 
-def serve(root: Path,*,container=False,capture_folder=None):
+def serve(root: Path,*,container=False,capture_folder=None,outlook_folder=None,timetracker_config=None):
     initialize(root)
     if (root/'.local-state/restore-incomplete').exists(): raise RuntimeError('restore incomplete; operator recovery required')
     if validate_repository(root): raise RuntimeError('data validation failed')
@@ -185,7 +218,7 @@ def serve(root: Path,*,container=False,capture_folder=None):
                 if method!='POST' or query or body!=b'{}': return 400,{'error':{'code':'invalid_request'}}
                 notifications.heartbeat(now); return 200,{'status':'ok'}
             return None
-        server=create_server('0.0.0.0' if container else '127.0.0.1',24873,root,bind_origin=ORIGINS[0],mutation_origins=ORIGINS,extra_handler=extra,health_details={'distribution':'mokvia','mode':'local'},strict_hosts=('localhost:24873','127.0.0.1:24873'),capture_folder=capture_folder)
+        server=create_server('0.0.0.0' if container else '127.0.0.1',24873,root,bind_origin=ORIGINS[0],mutation_origins=ORIGINS,extra_handler=extra,health_details={'distribution':'mokvia','mode':'local'},strict_hosts=('localhost:24873','127.0.0.1:24873'),capture_folder=capture_folder,outlook_folder=outlook_folder,timetracker_config=timetracker_config)
         stopped=threading.Event()
         def worker():
             while not stopped.is_set():
@@ -209,13 +242,15 @@ def serve(root: Path,*,container=False,capture_folder=None):
 def main():
     parser=argparse.ArgumentParser(); sub=parser.add_subparsers(dest='command',required=True)
     sub.add_parser('init'); p=sub.add_parser('serve'); p.add_argument('--container',action='store_true')
+    p.add_argument('--outlook-folder',type=Path,help='Explicit dedicated read-write local Outlook command folder; disabled when omitted')
+    p.add_argument('--timetracker-config',type=Path,help='Reviewed non-secret NX configuration outside source and data; credentials are environment references only')
     p.add_argument('--capture-folder',type=Path,help='Explicit absolute read-only company handoff folder; disabled when omitted')
     p=sub.add_parser('backup'); p.add_argument('--output',type=Path,required=True)
     p=sub.add_parser('restore'); p.add_argument('--input',type=Path,required=True)
     args=parser.parse_args()
     try:
         if args.command=='init': initialize(DATA_ROOT)
-        elif args.command=='serve': serve(DATA_ROOT,container=args.container,capture_folder=args.capture_folder)
+        elif args.command=='serve': serve(DATA_ROOT,container=args.container,capture_folder=args.capture_folder,outlook_folder=args.outlook_folder,timetracker_config=args.timetracker_config)
         elif args.command=='backup': backup(DATA_ROOT,args.output)
         else: print('Pre-restore backup:',restore(DATA_ROOT,args.input))
     except Exception as error:

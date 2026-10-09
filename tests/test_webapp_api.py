@@ -336,6 +336,15 @@ class ReadApiTest(unittest.TestCase):
         )
         self.assertEqual(payload["mutation_state"], {"recovery_required": False})
 
+    def test_next_count_includes_blocked_plan_while_actual_actionability_keeps_dependency_gate(self) -> None:
+        self.write_entity("tasks/first.md", "task", "task-reading-first", status="next", project_id="project-reading", project_position="1", action_date="2026-08-29", estimated_minutes="40")
+        self.write_entity("tasks/second.md", "task", "task-reading-second", status="next", project_id="project-reading", project_position="1", depends_on="[task-reading-first]", action_date="2026-08-29", estimated_minutes="35")
+        with mock.patch.object(api, "_mokvia_today", return_value=datetime.date(2026, 8, 29)):
+            status, payload = handle(self.store, "GET", "/api/v1/snapshot")
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["facts"]["task_status_counts"]["next"], 2)  # type: ignore[index]
+        self.assertEqual(payload["facts"]["focus_actionable_next_ids"], ["task-reading-first"])  # type: ignore[index]
+
     def test_focus_actionable_next_ids_respect_release_gates_and_archived_done_dependencies(self) -> None:
         """Catches blocked or future tasks being offered as executable Next Actions."""
         self.write_entity("archive/done.md", "task", "task-done", status="done")
@@ -2068,6 +2077,67 @@ class MutationApiTest(unittest.TestCase):
             ["task_updated", "task_created", "task_archived"],
         )
         self.assertEqual(validate_repository(self.root), [])
+
+    def test_confirmed_blocked_next_is_explicit_in_preview_and_dependency_change_invalidates_it(self) -> None:
+        project = self.write_project(status="doing")
+        first = self.write_task(entity_id="task-confirmed-next-first", title="先頭", status="next", project_id=project.entity_id, project_position="1")
+        second = self.write_task(entity_id="task-confirmed-next-second", title="次", status="waiting", project_id=project.entity_id, project_position="1", depends_on=f"[{first.entity_id}]", action_date="2026-07-19")
+        ordinary_status, ordinary = self.preview({"action": "update", "kind": "tasks", "id": second.entity_id, "base_hash": second.content_hash, "fields": {"status": "next"}})
+        self.assertEqual(ordinary_status, 200, ordinary)
+        self.assertEqual(ordinary["proposed"]["frontmatter"]["status"], "waiting")  # type: ignore[index]
+        operation = {"action": "update", "kind": "tasks", "id": second.entity_id, "base_hash": second.content_hash, "fields": {"status": "next"}, "confirm_blocked_next": True}
+        status, preview = self.preview(operation)
+        self.assertEqual(status, 200, preview)
+        self.assertEqual(preview["operation"], {**operation, "body": None})
+        self.assertEqual(preview["proposed"]["frontmatter"]["status"], "next")  # type: ignore[index]
+        self.assertEqual(preview["proposed"]["frontmatter"]["depends_on"], f"[{first.entity_id}]")  # type: ignore[index]
+        first_fresh = self.store.get_entity(first.entity_id)
+        first_edit_status, first_edit = self.preview({"action": "update", "kind": "tasks", "id": first.entity_id, "base_hash": first_fresh.content_hash, "fields": {"title": "先頭の更新"}})
+        self.assertEqual(first_edit_status, 200, first_edit)
+        self.assertEqual(self.apply(first_edit)[0], 200)
+        self.assert_error(self.apply(preview), 409, "conflict")
+        latest = self.store.get_entity(second.entity_id)
+        self.assertEqual(latest.frontmatter["status"], "waiting")
+        self.assertEqual(latest.frontmatter["depends_on"], f"[{first.entity_id}]")
+
+    def test_confirmed_blocked_next_full_editor_save_preserves_links_and_start_gate(self) -> None:
+        project = self.write_project(status="doing")
+        first = self.write_task(entity_id="task-editor-first", status="next", project_id=project.entity_id, project_position="1")
+        second = self.write_task(entity_id="task-editor-second", status="waiting", project_id=project.entity_id, project_position="1", depends_on=f"[{first.entity_id}]", action_date="2026-07-19")
+        fields = {"title": "編集後", "status": "next", "project_id": project.entity_id, "depends_on": f"[{first.entity_id}]", "estimated_minutes": "60", "action_date": "2026-07-19", "waiting_for": "", "available_from": ""}
+        operation = {"action": "update", "kind": "tasks", "id": second.entity_id, "base_hash": second.content_hash, "fields": fields, "body": "編集した本文", "confirm_blocked_next": True}
+        status, preview = self.preview(operation)
+        self.assertEqual(status, 200, preview)
+        self.assertEqual(preview["proposed"]["frontmatter"]["status"], "next")
+        self.assertEqual(self.apply(preview)[0], 200)
+        latest = self.store.get_entity(second.entity_id)
+        self.assertEqual(latest.frontmatter["depends_on"], f"[{first.entity_id}]")
+        self.assertEqual(latest.frontmatter["title"], "編集後")
+        self.assertIn("編集した本文", latest.body)
+        self.assert_error(self.preview({"action": "start", "kind": "tasks", "id": latest.entity_id, "base_hash": latest.content_hash}), 400, "invalid_request")
+        edit_status, edit = self.preview({"action": "update", "kind": "tasks", "id": latest.entity_id, "base_hash": latest.content_hash, "fields": {"title": "再編集"}})
+        self.assertEqual(edit_status, 200, edit)
+        self.assertEqual(edit["proposed"]["frontmatter"]["status"], "next")
+        self.assertEqual(self.apply(edit)[0], 200)
+
+    def test_confirmed_blocked_next_full_editor_rejects_other_gate_bypasses(self) -> None:
+        project = self.write_project(status="doing")
+        other = self.write_project(entity_id="project-editor-other", status="doing")
+        first = self.write_task(entity_id="task-editor-gate-first", status="next", project_id=project.entity_id)
+        second = self.write_task(entity_id="task-editor-gate-second", status="waiting", project_id=project.entity_id, depends_on=f"[{first.entity_id}]")
+        base = {"action": "update", "kind": "tasks", "id": second.entity_id, "base_hash": second.content_hash, "confirm_blocked_next": True}
+        for fields in ({"project_id": other.entity_id}, {"waiting_for": "返信"}, {"available_from": "2099-01-01"}, {"depends_on": "[]"}):
+            with self.subTest(fields=fields):
+                self.assert_error(self.preview({**base, "fields": {"status": "next", **fields}}), 400, "invalid_request")
+        self.assertEqual(self.store.get_entity(second.entity_id).content_hash, second.content_hash)
+
+    def test_confirmed_blocked_next_rejects_non_boolean_and_dependency_changes(self) -> None:
+        project = self.write_project(status="doing")
+        first = self.write_task(entity_id="task-confirmed-invalid-first", status="next", project_id=project.entity_id, project_position="1")
+        second = self.write_task(entity_id="task-confirmed-invalid-second", status="waiting", project_id=project.entity_id, project_position="1", depends_on=f"[{first.entity_id}]")
+        base = {"action": "update", "kind": "tasks", "id": second.entity_id, "base_hash": second.content_hash, "fields": {"status": "next"}}
+        self.assert_error(self.preview({**base, "confirm_blocked_next": "yes"}), 400, "invalid_request")
+        self.assert_error(self.preview({**base, "fields": {"status": "next", "depends_on": "[]"}, "confirm_blocked_next": True}), 400, "invalid_request")
 
     def test_project_task_plan_update_apply_rejects_tree_membership_drift(self) -> None:
         """Catches an apply overwriting a concurrently changed complete tree snapshot."""

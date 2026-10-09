@@ -328,3 +328,5 @@ Ubuntu本体と会社配布はcapture／ローカルCalendarの汎用コード�
 | [COPILOT.md](COPILOT.md) | 会社承認済みCopilotへの手動支援の開始文 |
 
 **この冊子の終了チェック：** 自分のTaskを収集し、行き先と対応予定日を決め、開始・完了の記録を確認できる。保存場所と停止・Backupの入口が分かり、困ったときに必要な章を開ける。ここまでできれば、最初の運用を自分で続けられます。
+
+Outlookの会議予定をボタンで取り込み、終了した会議を完了・実績調整する追加機能は [OUTLOOK-CALENDAR.md](OUTLOOK-CALENDAR.md) を参照してください。メールのTask取り込みとは別機能です。会社接続・Windows Outlook実機は復帰後の受入対象です。

@@ -218,8 +218,10 @@ button:disabled { opacity: .55; cursor: wait; pointer-events: none; }
 .focus-section-heading, .focus-action-section .task-card { padding-inline: 1rem; }
 .focus-section-heading { width: 100%; min-height: 48px; display: flex; justify-content: space-between; align-items: center; border: 0; border-radius: 0; color: var(--text); background: var(--surface-soft); }
 .focus-section-heading span { color: var(--muted); font-size: .86rem; }
-.focus-today-add-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: .65rem; padding: .8rem 1rem; }
-.focus-today-add-form .field { min-width: 0; }
+.focus-section-header { display: flex; align-items: center; background: var(--surface-soft); }
+.focus-section-header .focus-section-heading { flex: 1; min-width: 0; }
+.focus-section-header > .secondary { flex: none; margin-inline: .5rem; }
+#review-save-status { overflow-wrap: anywhere; }
 .task-card { position: relative; display: grid; gap: .38rem; min-width: 0; padding: .82rem .9rem; border-bottom: 1px solid var(--line); }
 .focus-action-section .task-card { gap: .5rem; padding-block: .82rem; border-top: 1px solid var(--line); border-bottom: 0; }
 .focus-action-section > .entity-list:first-of-type .task-card:first-child { border-top: 0; }
@@ -1282,3 +1284,15 @@ body.project-tree-maximized.roadmap-detail-open .roadmap-outcome-detail { z-inde
   .direction-overview { max-width: 60rem; }
   .direction-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* The singleton normal screen also adapts to the narrow Review workspace. */
+.review-screen-workspace { container-type: inline-size; min-width: 0; }
+.review-screen-workspace > .screen { padding: 0; min-width: 0; }
+@container (max-width: 900px) {
+  .review-screen-workspace .inbox-v2-layout, .review-screen-workspace .inbox-v2-layout:has(> .inbox-stage-sheet[hidden]) { grid-template-columns: minmax(0, 1fr); width: 100%; }
+  .review-screen-workspace .project-kanban { grid-template-columns: minmax(0, 1fr); }
+  .review-screen-workspace .inbox-stage-sheet { position: static; }
+  .review-screen-workspace .inbox-lane-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.roadmap-detail-open :is(.inbox-drag-layer, .project-drag-layer, .drag-destination-dock, .focus-archive-drop-target) { z-index: 64; }

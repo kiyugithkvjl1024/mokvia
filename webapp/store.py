@@ -1504,12 +1504,17 @@ class Store:
         base_hash: str,
         fields: dict[str, str],
         body: str | None,
+        *,
+        confirm_blocked_next: bool = False,
     ) -> MutationPlan | WorkflowPlan:
         """Preview one exact update without changing canonical entity files."""
+        if type(confirm_blocked_next) is not bool:
+            raise InputError("blocked Next confirmation must be boolean")
         with self.mutation_lock():
             self._require_mutations_available_locked()
             plan = self._plan_dependency_aware_update_locked(
-                entity_id, base_hash, fields, body
+                entity_id, base_hash, fields, body,
+                confirm_blocked_next=confirm_blocked_next,
             )
             if not isinstance(plan, WorkflowPlan):
                 return plan
@@ -8640,8 +8645,42 @@ class Store:
         base_hash: str,
         fields: dict[str, str],
         body: str | None,
+        *,
+        confirm_blocked_next: bool = False,
     ) -> MutationPlan | WorkflowPlan:
         current = self._require_mutation_current(entity_id, base_hash)
+        confirmed_dependency_snapshot: list[dict[str, str]] = []
+        if confirm_blocked_next:
+            if (
+                current.entity_type != "task"
+                or fields.get("status") != "next"
+                or current.frontmatter.get("status") in {"doing", "done"}
+                or not current.frontmatter.get("project_id")
+                or current.frontmatter.get("waiting_for")
+            ):
+                raise InputError("confirmed blocked Next requires a Project Task update to Next")
+            dependencies = self._task_dependencies(dict(current.frontmatter))
+            if (
+                fields.get("project_id", current.frontmatter.get("project_id"))
+                != current.frontmatter.get("project_id")
+                or fields.get("waiting_for", "")
+                or (
+                    "depends_on" in fields
+                    and parse_inline_list(fields["depends_on"]) != list(dependencies)
+                )
+            ):
+                raise InputError("confirmed blocked Next must preserve Project and dependencies and cannot bypass Waiting")
+            if not dependencies:
+                raise InputError("confirmed blocked Next requires unmet dependencies")
+            for dependency_id in dependencies:
+                dependency = self._find_mutation_entity(dependency_id)
+                confirmed_dependency_snapshot.append({
+                    "id": dependency_id,
+                    "base_hash": dependency.content_hash,
+                    "status": dependency.frontmatter.get("status", ""),
+                })
+            if all(item["status"] == "done" for item in confirmed_dependency_snapshot):
+                raise InputError("confirmed blocked Next requires unmet dependencies")
         adjusted_fields = dict(fields)
         adjusted_body = body
         primary_role: str | None = None
@@ -8688,7 +8727,11 @@ class Store:
                 projected, now
             )
             projected_status = projected.get("status")
-            if (
+            if confirm_blocked_next:
+                if not self._task_available_from_reached(projected, now):
+                    raise InputError("confirmed blocked Next cannot bypass availability")
+                adjusted_fields["status"] = "next"
+            elif (
                 projected_status != "done"
                 and dependency_changed
                 and not self._dependencies_satisfied(projected)
@@ -8700,7 +8743,17 @@ class Store:
                     else "waiting"
                 )
                 primary_role = "dependency_retargeted"
-            elif projected_status == "next" and not release_gates_satisfied:
+            elif (
+                projected_status == "next"
+                and not release_gates_satisfied
+                and not (
+                    current.frontmatter.get("status") == "next"
+                    and not dependency_changed
+                    and projected.get("project_id") == current.frontmatter.get("project_id")
+                    and not projected.get("waiting_for")
+                    and self._task_available_from_reached(projected, now)
+                )
+            ):
                 adjusted_fields["status"] = "waiting"
                 if dependency_changed:
                     primary_role = "dependency_retargeted"
@@ -8732,6 +8785,8 @@ class Store:
             adjusted_fields,
             adjusted_body,
             timestamp=update_timestamp,
+            confirm_blocked_next=confirm_blocked_next,
+            confirmed_dependency_snapshot=confirmed_dependency_snapshot,
         )
         action_date_removed = (
             current.entity_type == "task"
@@ -8827,6 +8882,8 @@ class Store:
         body: str | None,
         *,
         timestamp: str | None = None,
+        confirm_blocked_next: bool = False,
+        confirmed_dependency_snapshot: list[dict[str, str]] | None = None,
     ) -> MutationPlan:
         if body is not None and not isinstance(body, str):
             raise InputError("body must be a string or None")
@@ -8922,6 +8979,18 @@ class Store:
             + tuple(
                 (f"field:{key}", value)
                 for key, value in sorted(fields.items())
+            )
+            + (("confirm_blocked_next", "true"), ("confirmed_dependency_snapshot", json.dumps(confirmed_dependency_snapshot or [], ensure_ascii=False, separators=(",", ":"), sort_keys=True)))
+            if confirm_blocked_next
+            else (
+                (
+                    ("body_mode", "preserve" if body is None else "replace"),
+                    ("body", "" if body is None else body),
+                )
+                + tuple(
+                    (f"field:{key}", value)
+                    for key, value in sorted(fields.items())
+                )
             )
         )
         return self._build_plan(
@@ -9779,6 +9848,55 @@ class Store:
                 "body",
                 *(f"field:{key}" for key in fields),
             }
+            confirm_blocked_next = inputs.get("confirm_blocked_next")
+            if confirm_blocked_next is not None:
+                if (
+                    confirm_blocked_next != "true"
+                    or "confirmed_dependency_snapshot" not in inputs
+                    or fields.get("status") != "next"
+                    or plan.entity_type != "task"
+                ):
+                    raise InputError("blocked Next confirmation is invalid")
+                try:
+                    dependency_snapshot = json.loads(
+                        inputs["confirmed_dependency_snapshot"]
+                    )
+                except (TypeError, ValueError) as error:
+                    raise InputError("blocked Next dependency snapshot is invalid") from error
+                dependencies = self._task_dependencies(
+                    dict(plan.before_entity.frontmatter)
+                )
+                if (
+                    type(dependency_snapshot) is not list
+                    or [item.get("id") for item in dependency_snapshot if type(item) is dict]
+                    != list(dependencies)
+                    or len(dependency_snapshot) != len(dependencies)
+                ):
+                    raise MutationPlanConflict(
+                        "Task dependencies changed after blocked Next confirmation"
+                    )
+                for item in dependency_snapshot:
+                    if (
+                        type(item) is not dict
+                        or set(item) != {"id", "base_hash", "status"}
+                    ):
+                        raise InputError("blocked Next dependency snapshot is invalid")
+                    current_dependency = self._find_mutation_entity(item["id"])
+                    if (
+                        current_dependency.content_hash != item["base_hash"]
+                        or current_dependency.frontmatter.get("status", "")
+                        != item["status"]
+                    ):
+                        raise MutationPlanConflict(
+                            "Task dependency changed after blocked Next confirmation"
+                        )
+                if all(item["status"] == "done" for item in dependency_snapshot):
+                    raise MutationPlanConflict(
+                        "Task dependencies no longer block Next"
+                    )
+                expected_keys.update(
+                    {"confirm_blocked_next", "confirmed_dependency_snapshot"}
+                )
             if set(inputs) != expected_keys or inputs["body_mode"] not in {
                 "preserve",
                 "replace",

@@ -213,7 +213,7 @@
     if (ctx.mutationIsGated()) { select.value = previousStatus; select.focus(); return; }
     const token = ctx.beginTaskPreparation ? ctx.beginTaskPreparation() : null; if (ctx.beginTaskPreparation && token === null) { select.value = previousStatus; select.focus(); return; }
     const restore = () => { select.value = previousStatus; select.focus(); };
-    void (async () => { try { const fresh = await ctx.apiRequest(ctx.entityDetailPath("tasks", task.id)); await ctx.previewMutation({action: "update", kind: "tasks", id: fresh.id, base_hash: fresh.content_hash, fields: {status: select.value}}, () => {}, select, token, {onFailure: restore}); } catch (error) { restore(); ctx.showRequestError(error); } finally { if (token !== null) ctx.finishTaskPreparation(token); } })();
+    void (async () => { try { const fresh = await ctx.apiRequest(ctx.entityDetailPath("tasks", task.id)); const operation = {action: "update", kind: "tasks", id: fresh.id, base_hash: fresh.content_hash, fields: {status: select.value}}; await ctx.previewMutation(operation, () => {}, select, token, {onFailure: restore, onCancel: restore}); } catch (error) { restore(); ctx.showRequestError(error); } finally { if (token !== null) ctx.finishTaskPreparation(token); } })();
   }
 
   function taskStatusSelect(ctx, task, className) {
@@ -267,11 +267,12 @@
     const card = document.createElement("div"); card.className = "project-tree-card"; card.append(...[...item.children]); item.append(card); let content = card;
     if (fields.status !== "done") { const cardLink = card.querySelector(".task-card-title"); if (cardLink) cardLink.className += " project-tree-card-link"; }
     if (fields.status === "done") { const details = document.createElement("details"), summary = document.createElement("summary"); details.dataset.taskId = task.id; details.open = false; summary.append(...[...card.children]); details.append(summary); card.append(details); content = details; }
-    if (depth === 0 && ["planned", "next"].includes(fields.status)) {
+    const dependencyIds = idList(fields.depends_on), dependencyNextEligible = fields.status === "waiting" && dependencyIds.length > 0 && !fields.waiting_for;
+    if (["planned", "next"].includes(fields.status) || dependencyNextEligible) {
       const actions = document.createElement("div"), statusPill = document.createElement("span"), menu = document.createElement("details"), summary = document.createElement("summary"), change = button(fields.status === "next" ? "計画にする" : "Nextにする", () => {
-        menu.open = false; summary.focus(); const select = {value: fields.status === "next" ? "planned" : "next", focus() { summary.focus(); }}; changeTaskStatus(ctx, task, select, fields.status);
+        menu.open = false; summary.focus(); const backStatus = dependencyIds.length ? "waiting" : "planned", select = {value: fields.status === "next" ? backStatus : "next", focus() { summary.focus(); }}; changeTaskStatus(ctx, task, select, fields.status);
       });
-      actions.className = "project-tree-root-actions"; statusPill.className = "project-tree-status-pill"; statusPill.textContent = fields.status === "next" ? "Next" : "計画"; menu.className = "project-tree-status-menu"; summary.textContent = "…"; summary.setAttribute("aria-label", "状態を変更"); menu.append(summary, change); registerStatusMenu(menu, summary); actions.append(statusPill, menu); content.append(actions);
+      actions.className = "project-tree-root-actions"; statusPill.className = "project-tree-status-pill"; statusPill.textContent = fields.status === "next" ? "Next" : fields.status === "planned" ? "計画" : ctx.taskStatusLabel(fields.status); menu.className = "project-tree-status-menu"; summary.textContent = "…"; summary.setAttribute("aria-label", "状態を変更"); menu.append(summary, change); registerStatusMenu(menu, summary); actions.append(statusPill, menu); content.append(actions);
     }
     else if (fields.status !== "done" && !["planned", "next"].includes(fields.status)) { const statusPill = document.createElement("span"); statusPill.className = "project-tree-status-pill"; statusPill.textContent = ctx.taskStatusLabel(fields.status); content.append(statusPill); }
     const continuation = continuationGroups.get(task.id);
@@ -410,7 +411,7 @@
     const openTaskDetail = (event, id) => openTaskDetailSheet({event, elements, id, detail: (value) => ctx.apiRequest(ctx.entityDetailPath("tasks", value)), snapshot: () => ctx.apiRequest("/api/v1/snapshot"), render: ({content, detail: task, source, onEdit}) => renderTaskDetail({content, detail: task, snapshot: source, safeFrontmatter: ctx.safeFrontmatter, taskStatusLabel: ctx.taskStatusLabel, clarifyHref: ctx.clarifyHref, onEdit}), edit: ctx.openTaskEditor, refresh: (_task, source) => refreshTaskPresentation(treeContext, source), failed: ctx.showRequestError});
     const treeContext = {...ctx, openTaskDetail};
     renderProjectDetailLineage(ctx);
-    elements.projectDetailHeading.textContent = fm.title || detail.id; if (elements.projectDetailPeriod) elements.projectDetailPeriod.textContent = "目安期間: " + (fm.planned_start_date && fm.planned_end_date ? fm.planned_start_date + " 〜 " + fm.planned_end_date : "時期未設定"); elements.projectDetailState.textContent = "状態: " + ctx.projectStatusLabel(fm.status); if (elements.projectDetailStatus) elements.projectDetailStatus.value = fm.status || "not_started"; elements.projectSupportBody.value = detail.body || "";
+    elements.projectDetailHeading.textContent = fm.title || detail.id; if (elements.projectDetailPeriod) elements.projectDetailPeriod.textContent = "目安期間: " + (fm.planned_start_date && fm.planned_end_date ? fm.planned_start_date + " 〜 " + fm.planned_end_date : "時期未設定"); elements.projectDetailState.textContent = "状態: " + ctx.projectStatusLabel(fm.status); if (elements.projectDetailStatus) elements.projectDetailStatus.value = fm.status || "not_started"; if (global.MarkdownPreview && global.MarkdownPreview.load) global.MarkdownPreview.load(elements.projectSupportBody, detail); else elements.projectSupportBody.value = detail.body || "";
     renderTaskRegions(treeContext, tasks);
     centerInitialTree(detail.id, elements.projectPlanTree);
   }
@@ -476,24 +477,160 @@
   let projectDetailHome = null, projectDetailSheet = null, taskDetailSheet = null, roadmapResize = null;
   function restoreProjectDetail(elements) { const home = projectDetailHome; if (!home) return; const panel = elements.projectDetailPanel; if (home.placeholder.parentNode) home.placeholder.parentNode.insertBefore(panel, home.placeholder); home.placeholder.remove(); elements.projectDetailBack.textContent = home.backText; elements.projectDetailBack.href = home.backHref; elements.projectDetailBack.onclick = home.backOnClick; if (elements.projectDetailEdit) elements.projectDetailEdit.hidden = home.editHidden; panel.hidden = home.panelHidden; elements.projectListing.hidden = home.listingHidden; projectDetailHome = null; }
   function mountProjectDetail({elements, content, detail, snapshot, render, backText, backHref, onBack}) { restoreProjectDetail(elements); const panel = elements.projectDetailPanel, placeholder = document.createComment("project-detail-home"); if (!panel.parentNode) throw new Error("Project詳細の復元先がありません。"); panel.parentNode.insertBefore(placeholder, panel); projectDetailHome = {placeholder, backText: elements.projectDetailBack.textContent, backHref: elements.projectDetailBack.href, backOnClick: elements.projectDetailBack.onclick, editHidden: elements.projectDetailEdit && elements.projectDetailEdit.hidden, panelHidden: panel.hidden, listingHidden: elements.projectListing.hidden}; content.replaceChildren(panel); render(detail, snapshot); elements.projectListing.hidden = projectDetailHome.listingHidden; if (elements.projectDetailEdit) elements.projectDetailEdit.hidden = true; if (backText) elements.projectDetailBack.textContent = backText; if (backHref) elements.projectDetailBack.href = backHref; if (onBack) elements.projectDetailBack.onclick = (event) => { event.preventDefault(); onBack(); }; }
-  function openProjectDetailSheet({event, elements, id, render, detail, snapshot, mounted, failed}) { if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0 || !id) return false; event.preventDefault(); const request = (projectDetailSheet ? projectDetailSheet.request : 0) + 1; projectDetailSheet = {request, id, trigger: event.currentTarget, elements, render, mounted}; elements.roadmapOutcomeDetailPanel.hidden = false; elements.roadmapDetailBackdrop.hidden = false; document.body.classList.add("roadmap-detail-open"); elements.roadmapOutcomeDetailHeading.textContent = "Project詳細"; elements.roadmapOutcomeDetailContent.textContent = "Project詳細を読み込み中です。"; elements.roadmapOutcomeDetailHeading.focus(); global.history.pushState({projectDetailId: id}, "", global.location.href); Promise.all([detail(id), snapshot()]).then(([value, source]) => { if (!projectDetailSheet || projectDetailSheet.request !== request) return; if (!value || value.id !== id || value.kind !== "projects" || value.archived === true) throw new Error("Project詳細を読み込めませんでした。"); mounted(value, source); mountProjectDetail({elements, content: elements.roadmapOutcomeDetailContent, detail: value, snapshot: source, render, backText: "Projectを編集", backHref: "/projects?level=projects&id=" + encodeURIComponent(id)}); elements.roadmapOutcomeDetailPanel.scrollTop = 0; elements.roadmapOutcomeDetailHeading.focus(); }).catch((error) => { if (!projectDetailSheet || projectDetailSheet.request !== request) return; restoreProjectDetail(elements); elements.roadmapOutcomeDetailContent.textContent = "Project詳細を読み込めませんでした。"; failed(error); }); return true; }
+  function capturePanel(elements) {
+    return {children: [...elements.roadmapOutcomeDetailContent.children].map((node) => ({node, hidden: node.hidden})), heading: elements.roadmapOutcomeDetailHeading.textContent, panelHidden: elements.roadmapOutcomeDetailPanel.hidden, backdropHidden: elements.roadmapDetailBackdrop.hidden, panelScrollTop: elements.roadmapOutcomeDetailPanel.scrollTop, bodyOpen: document.body.classList.contains("roadmap-detail-open")};
+  }
+  function restorePanel(elements, state) {
+    for (const item of state.children) item.node.hidden = item.hidden;
+    elements.roadmapOutcomeDetailHeading.textContent = state.heading; elements.roadmapOutcomeDetailPanel.scrollTop = state.panelScrollTop;
+    elements.roadmapOutcomeDetailPanel.hidden = state.panelHidden; elements.roadmapDetailBackdrop.hidden = state.backdropHidden;
+    if (!state.bodyOpen) document.body.classList.remove("roadmap-detail-open");
+  }
+  function openProjectDetailSheet({event, elements, id, render, detail, snapshot, mounted, failed, push = true}) {
+    if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0 || !id) return false;
+    event.preventDefault(); if (projectDetailSheet || taskDetailSheet) return true;
+    const host = document.createElement("section"), state = {...capturePanel(elements), request: 1, id, trigger: event.currentTarget, elements, render, mounted, host, closing: false};
+    projectDetailSheet = state; host.className = "project-detail-sheet";
+    for (const item of state.children) item.node.hidden = true;
+    elements.roadmapOutcomeDetailContent.append(host); elements.roadmapOutcomeDetailPanel.hidden = false; elements.roadmapDetailBackdrop.hidden = false; document.body.classList.add("roadmap-detail-open");
+    elements.roadmapOutcomeDetailHeading.textContent = "Project詳細"; host.textContent = "Project詳細を読み込み中です。"; elements.roadmapOutcomeDetailHeading.focus();
+    if (push) global.history.pushState({projectDetailId: id}, "", global.location.href);
+    Promise.all([detail(id), snapshot()]).then(([value, source]) => {
+      if (projectDetailSheet !== state || state.closing) return;
+      if (!value || value.id !== id || value.kind !== "projects" || value.archived === true || !source || !Array.isArray(source.entities)) throw new Error("Project詳細を読み込めませんでした。");
+      mounted(value, source); mountProjectDetail({elements, content: host, detail: value, snapshot: source, render, backText: "Projectを編集", backHref: "/projects?level=projects&id=" + encodeURIComponent(id)});
+      elements.roadmapOutcomeDetailPanel.scrollTop = 0; elements.roadmapOutcomeDetailHeading.focus();
+    }).catch((error) => { if (projectDetailSheet !== state || state.closing) return; restoreProjectDetail(elements); host.textContent = "Project詳細を読み込めませんでした。"; failed(error); }); return true;
+  }
   function renderTaskDetailSheet(elements, state) { state.render({content: state.host, detail: state.detail, source: state.source, onEdit: (event) => openTaskEditSheet({event, elements, mount: state.editMount})}); elements.roadmapOutcomeDetailHeading.textContent = "Task"; }
-  function openTaskEditSheet({event, elements, mount}) { if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0 || !taskDetailSheet || taskDetailSheet.edit || typeof mount !== "function") return false; event.preventDefault(); const state = taskDetailSheet, edit = {trigger: event.currentTarget, closing: false, cleanup: null, session: {}}; state.edit = edit; try { edit.cleanup = mount({content: state.host, detail: state.detail, source: state.source, session: edit.session, cancel: () => closeTaskEditSheet(elements, true, edit.session)}) || null; } catch (error) { state.edit = null; renderTaskDetailSheet(elements, state); throw error; } elements.roadmapOutcomeDetailHeading.textContent = "Taskを編集"; elements.roadmapOutcomeDetailPanel.scrollTop = 0; global.history.pushState({taskEditId: state.detail.id}, "", global.location.href); return true; }
+  function openTaskEditSheet({event, elements, mount, push = true}) { if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0 || !taskDetailSheet || taskDetailSheet.edit || typeof mount !== "function") return false; event.preventDefault(); const state = taskDetailSheet, edit = {trigger: event.currentTarget, closing: false, cleanup: null, session: {}}; state.edit = edit; try { edit.cleanup = mount({content: state.host, detail: state.detail, source: state.source, session: edit.session, cancel: () => closeTaskEditSheet(elements, true, edit.session)}) || null; } catch (error) { state.edit = null; renderTaskDetailSheet(elements, state); throw error; } elements.roadmapOutcomeDetailHeading.textContent = "Taskを編集"; elements.roadmapOutcomeDetailPanel.scrollTop = 0; if (push) global.history.pushState({taskEditId: state.detail.id}, "", global.location.href); return true; }
   function closeTaskEditSheet(elements, updateHistory = true, expectedSession = null, restoreBlockedHistory = !updateHistory) { const state = taskDetailSheet, edit = state && state.edit; if (!edit || (expectedSession && edit.session !== expectedSession)) return false; const canClose = !edit.cleanup || typeof edit.cleanup.canClose !== "function" || edit.cleanup.canClose(); if (!canClose) { if (restoreBlockedHistory) global.history.pushState({taskEditId: state.detail.id}, "", global.location.href); return true; } if (updateHistory) { if (!edit.closing) { edit.closing = true; global.history.back(); } return true; } state.edit = null; edit.closing = true; if (typeof edit.cleanup === "function") edit.cleanup(); renderTaskDetailSheet(elements, state); elements.roadmapOutcomeDetailPanel.scrollTop = 0; const nextEdit = state.host.querySelector(".task-detail-edit"); if (nextEdit) nextEdit.focus(); else elements.roadmapOutcomeDetailHeading.focus(); return true; }
   function updateTaskDetailSheet(detail, source, expectedSession = null) { if (!taskDetailSheet || (expectedSession && (!taskDetailSheet.edit || taskDetailSheet.edit.session !== expectedSession)) || !detail || detail.id !== taskDetailSheet.detail.id || detail.kind !== "tasks" || detail.archived === true || !source || !Array.isArray(source.entities)) return false; taskDetailSheet.detail = detail; taskDetailSheet.source = source; if (typeof taskDetailSheet.refresh === "function") taskDetailSheet.refresh(detail, source); if (!taskDetailSheet.edit) renderTaskDetailSheet(taskDetailSheet.elements, taskDetailSheet); return true; }
   function visibleNode(node) { for (let current = node; current; current = current.parentNode) if (current.hidden) return false; return true; }
   function replacementTaskTrigger(state) { const roots = state.children.map((item) => item.node), outside = typeof document.querySelectorAll === "function" ? [...document.querySelectorAll("[data-task-id], [data-task-link-id]")] : []; for (const node of [...roots.flatMap((root) => [...root.querySelectorAll("[data-task-id]"), ...root.querySelectorAll("[data-task-link-id]")]), ...outside]) { if (node.dataset.taskId !== state.detail.id && node.dataset.taskLinkId !== state.detail.id) continue; const trigger = node.classList.contains("task-card-title") ? node : node.querySelector(".task-card-title") || node; if (visibleNode(trigger)) return trigger; } return null; }
   function replacementProjectTrigger(id) { if (typeof document.querySelectorAll !== "function") return null; for (const node of document.querySelectorAll("[data-project-id]")) if (node.dataset.projectId === id) { const trigger = node.querySelector("a") || node; if (visibleNode(trigger)) return trigger; } return null; }
-  function openTaskDetailSheet({event, elements, id, render, edit, refresh, detail, snapshot, failed}) { if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0 || !id || taskDetailSheet) return false; event.preventDefault(); const content = elements.roadmapOutcomeDetailContent, host = document.createElement("section"), children = [...content.children].map((node) => ({node, hidden: node.hidden})), state = {trigger: event.currentTarget, host, children, heading: elements.roadmapOutcomeDetailHeading.textContent, panelHidden: elements.roadmapOutcomeDetailPanel.hidden, backdropHidden: elements.roadmapDetailBackdrop.hidden, panelScrollTop: elements.roadmapOutcomeDetailPanel.scrollTop, bodyOpen: document.body.classList.contains("roadmap-detail-open"), closing: false, detail: null, source: null, render, refresh, editMount: edit, edit: null, elements}; host.className = "task-detail-sheet"; for (const item of children) item.node.hidden = true; content.append(host); taskDetailSheet = state; elements.roadmapOutcomeDetailPanel.hidden = false; elements.roadmapDetailBackdrop.hidden = false; document.body.classList.add("roadmap-detail-open"); elements.roadmapOutcomeDetailHeading.textContent = "Task詳細"; host.textContent = "Task詳細を読み込み中です。"; elements.roadmapOutcomeDetailHeading.focus(); global.history.pushState({taskDetailId: id}, "", global.location.href); Promise.all([detail(id), snapshot()]).then(([value, source]) => { if (taskDetailSheet !== state || state.closing) return; if (!value || value.id !== id || value.kind !== "tasks" || value.archived === true || !source || !Array.isArray(source.entities)) throw new Error("Task詳細を読み込めませんでした。"); state.detail = value; state.source = source; renderTaskDetailSheet(elements, state); elements.roadmapOutcomeDetailPanel.scrollTop = 0; elements.roadmapOutcomeDetailHeading.focus(); }).catch((error) => { if (taskDetailSheet !== state || state.closing) return; host.textContent = "Task詳細を読み込めませんでした。"; failed(error); }); return true; }
-  function closeTaskDetailSheet(elements, updateHistory = true, restoreBlockedHistory = !updateHistory) { if (!taskDetailSheet) return false; if (taskDetailSheet.edit) return closeTaskEditSheet(elements, updateHistory, null, restoreBlockedHistory); const state = taskDetailSheet; if (updateHistory) { if (!state.closing) { state.closing = true; global.history.back(); } return true; } state.closing = true; taskDetailSheet = null; state.host.remove(); for (const item of state.children) item.node.hidden = item.hidden; elements.roadmapOutcomeDetailHeading.textContent = state.heading; elements.roadmapOutcomeDetailPanel.scrollTop = state.panelScrollTop; elements.roadmapOutcomeDetailPanel.hidden = state.panelHidden; elements.roadmapDetailBackdrop.hidden = state.backdropHidden; if (!state.bodyOpen) document.body.classList.remove("roadmap-detail-open"); const focus = state.trigger && state.trigger.isConnected && visibleNode(state.trigger) ? state.trigger : replacementTaskTrigger(state) || (state.panelHidden ? elements.focusFilterSummary || elements.projectDetailHeading : elements.roadmapOutcomeDetailHeading); if (focus) focus.focus(); return true; }
-  function closeProjectDetailSheet(elements, updateHistory = true) { if (closeTaskDetailSheet(elements, updateHistory)) return true; if (!projectDetailSheet) return false; const trigger = projectDetailSheet.trigger && projectDetailSheet.trigger.isConnected && visibleNode(projectDetailSheet.trigger) ? projectDetailSheet.trigger : replacementProjectTrigger(projectDetailSheet.id) || elements.projectsTab; projectDetailSheet.request += 1; restoreProjectDetail(elements); projectDetailSheet = null; elements.roadmapOutcomeDetailPanel.hidden = true; elements.roadmapDetailBackdrop.hidden = true; document.body.classList.remove("roadmap-detail-open"); if (updateHistory) global.history.back(); if (trigger) trigger.focus(); return true; }
+  function openTaskDetailSheet({event, elements, id, render, edit, refresh, detail, snapshot, failed, push = true}) { if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0 || !id) return false; event.preventDefault(); if (taskDetailSheet) return true; const content = elements.roadmapOutcomeDetailContent, host = document.createElement("section"), parent = capturePanel(elements), children = parent.children, state = {...parent, id, trigger: event.currentTarget, host, closing: false, detail: null, source: null, render, refresh, editMount: edit, edit: null, elements}; host.className = "task-detail-sheet"; for (const item of children) item.node.hidden = true; content.append(host); taskDetailSheet = state; elements.roadmapOutcomeDetailPanel.hidden = false; elements.roadmapDetailBackdrop.hidden = false; document.body.classList.add("roadmap-detail-open"); elements.roadmapOutcomeDetailHeading.textContent = "Task詳細"; host.textContent = "Task詳細を読み込み中です。"; elements.roadmapOutcomeDetailHeading.focus(); if (push) global.history.pushState({taskDetailId: id}, "", global.location.href); state.ready = Promise.all([detail(id), snapshot()]).then(([value, source]) => { if (taskDetailSheet !== state || state.closing) return; if (!value || value.id !== id || value.kind !== "tasks" || value.archived === true || !source || !Array.isArray(source.entities)) throw new Error("Task詳細を読み込めませんでした。"); state.detail = value; state.source = source; renderTaskDetailSheet(elements, state); elements.roadmapOutcomeDetailPanel.scrollTop = 0; elements.roadmapOutcomeDetailHeading.focus(); }).catch((error) => { if (taskDetailSheet !== state || state.closing) return; host.textContent = "Task詳細を読み込めませんでした。"; failed(error); }); return true; }
+  function closeTaskDetailSheet(elements, updateHistory = true, restoreBlockedHistory = !updateHistory) { if (!taskDetailSheet) return false; if (taskDetailSheet.edit) return closeTaskEditSheet(elements, updateHistory, null, restoreBlockedHistory); const state = taskDetailSheet; if (updateHistory) { if (!state.closing) { state.closing = true; global.history.back(); } return true; } state.closing = true; taskDetailSheet = null; state.host.remove(); restorePanel(elements, state); const focus = state.trigger && state.trigger.isConnected && visibleNode(state.trigger) ? state.trigger : replacementTaskTrigger(state) || (state.panelHidden ? elements.focusFilterSummary || elements.projectDetailHeading : elements.roadmapOutcomeDetailHeading); if (focus) focus.focus({preventScroll: true}); return true; }
+  function closeProjectDetailSheet(elements, updateHistory = true) {
+    if (closeTaskDetailSheet(elements, updateHistory)) return true;
+    const state = projectDetailSheet; if (!state) return false;
+    if (updateHistory) { if (!state.closing) { state.closing = true; global.history.back(); } return true; }
+    state.closing = true; state.request += 1; restoreProjectDetail(elements); state.host.remove(); projectDetailSheet = null; restorePanel(elements, state);
+    const trigger = state.trigger && state.trigger.isConnected && visibleNode(state.trigger) ? state.trigger : replacementProjectTrigger(state.id) || (state.panelHidden ? elements.projectsTab : elements.roadmapOutcomeDetailHeading);
+    if (trigger) trigger.focus({preventScroll: true}); return true;
+  }
   function createEntityDetailController(ctx) {
     const snapshot = () => ctx.apiRequest("/api/v1/snapshot"), detail = (kind, id) => ctx.apiRequest(ctx.entityDetailPath(kind, id));
-    const openTask = (event, id, refresh) => openTaskDetailSheet({event, elements: ctx.elements, id, detail: (value) => detail("tasks", value), snapshot, render: ({content, detail: value, source, onEdit}) => renderTaskDetail({content, detail: value, snapshot: source, safeFrontmatter: ctx.safeFrontmatter, taskStatusLabel: ctx.taskStatusLabel, clarifyHref: ctx.clarifyHref, onEdit}), edit: ctx.openTaskEditor, refresh, failed: ctx.failed});
-    const openProject = (event, id) => openProjectDetailSheet({event, elements: ctx.elements, id, render: ctx.renderProject, detail: (value) => detail("projects", value), snapshot, mounted: ctx.mountedProject, failed: ctx.failed});
+    const openTask = (event, id, refresh, push = true) => openTaskDetailSheet({event, elements: ctx.elements, id, detail: (value) => detail("tasks", value), snapshot, render: ({content, detail: value, source, onEdit}) => renderTaskDetail({content, detail: value, snapshot: source, safeFrontmatter: ctx.safeFrontmatter, taskStatusLabel: ctx.taskStatusLabel, clarifyHref: ctx.clarifyHref, onEdit}), edit: ctx.openTaskEditor, refresh, failed: ctx.failed, push});
+    const openProject = (event, id, push = true) => openProjectDetailSheet({event, elements: ctx.elements, id, render: ctx.renderProject, detail: (value) => detail("projects", value), snapshot, mounted: ctx.mountedProject, failed: ctx.failed, push});
     const refreshProject = async (source) => { const state = projectDetailSheet; if (!state) return false; const value = await detail("projects", state.id); if (projectDetailSheet !== state) return false; if (!value || value.id !== state.id || value.kind !== "projects" || value.archived === true) throw new Error("Project詳細を読み込めませんでした。"); state.mounted(value, source); state.render(value, source); if (projectDetailHome) state.elements.projectListing.hidden = projectDetailHome.listingHidden; state.elements.projectDetailBack.textContent = "Projectを編集"; state.elements.projectDetailBack.href = "/projects?level=projects&id=" + encodeURIComponent(state.id); if (state.elements.projectDetailEdit) state.elements.projectDetailEdit.hidden = true; state.elements.roadmapOutcomeDetailHeading.focus(); return true; };
     const bindTaskCard = (card, entity, refresh) => { const link = card && card.querySelector(".task-card-title"); if (link) link.addEventListener("click", (event) => openTask(event, entity.id, refresh)); return link; }, bindProjectLink = (link, entity) => { if (link) link.addEventListener("click", (event) => openProject(event, entity.id)); return link; };
     return {openTask, openProject, refreshProject, bindTaskCard, bindProjectLink, t: bindTaskCard, p: bindProjectLink};
+  }
+  // Mount the normal screen itself: its forms, listeners and mutation flow remain singleton.
+  function createReviewListController(ctx) {
+    const {elements} = ctx;
+    let active = null, navigationGeneration = 0;
+    const eligible = (event) => !event.defaultPrevented && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+    function currentHref() { return active ? active.href : null; }
+    function updateHref(href) {
+      if (!active || !ctx.screenFor(href)) return false;
+      active.href = href; global.history.replaceState({reviewList: href}, "", global.location.href); return true;
+    }
+    function mount(state, href, screen) {
+      state.href = href; state.screen = screen;
+      const node = screen.node, placeholder = document.createComment("review-screen-home");
+      node.parentNode.insertBefore(placeholder, node); state.home = {placeholder, hidden: node.hidden};
+      state.host.append(node); node.hidden = false;
+      ctx.activate(screen, href);
+      elements.roadmapOutcomeDetailHeading.textContent = screen.title;
+      elements.roadmapOutcomeDetailPanel.scrollTop = 0;
+      void screen.load();
+    }
+    function unmount(state) {
+      ctx.deactivate(state.screen);
+      const {placeholder, hidden} = state.home;
+      if (placeholder.parentNode) placeholder.parentNode.insertBefore(state.screen.node, placeholder);
+      placeholder.remove(); state.screen.node.hidden = hidden;
+    }
+    function blocked(updateHistory) {
+      if (!ctx.busy() && ctx.canClose(elements.roadmapOutcomeDetailContent)) return false;
+      if (!updateHistory) global.history.pushState(taskDetailSheet ? {taskDetailId: taskDetailSheet.id} : projectDetailSheet ? {projectDetailId: projectDetailSheet.id} : {reviewList: active.href}, "", global.location.href);
+      if (ctx.busy()) active.status.textContent = "保存処理中です。完了するまでお待ちください。";
+      return true;
+    }
+    function open(event, href, push = true) {
+      const screen = ctx.screenFor(href);
+      if (!eligible(event) || !screen) return false;
+      event.preventDefault();
+      if (active) {
+        if (active.closing || active.href === href) return true;
+        if (blocked(true) || taskDetailSheet) return true;
+        if (projectDetailSheet) { if (!href.includes("id=")) return true; closeProjectDetailSheet(elements, false); }
+        unmount(active); mount(active, href, screen); updateHref(href); return true;
+      }
+      const host = document.createElement("section"), status = document.createElement("p"), state = {...capturePanel(elements), trigger: event.currentTarget, href, originHref: href, host, status, scrollY: global.scrollY || 0, closing: false};
+      host.className = "review-screen-workspace"; state.feedback = [elements.error, elements.notice].filter(Boolean).map(node => { const placeholder = document.createComment("review-feedback-home"); node.parentNode.insertBefore(placeholder, node); elements.roadmapOutcomeDetailContent.parentNode.insertBefore(node, elements.roadmapOutcomeDetailContent); return {node, placeholder}; }); status.setAttribute("role", "status"); host.append(status);
+      for (const item of state.children) item.node.hidden = true;
+      active = state; elements.roadmapOutcomeDetailContent.append(host);
+      elements.roadmapOutcomeDetailPanel.hidden = false; elements.roadmapDetailBackdrop.hidden = false; document.body.classList.add("roadmap-detail-open");
+      mount(state, href, screen); elements.roadmapOutcomeDetailHeading.focus();
+      // Keep the Review URL and its live Notes/checks behind the workspace.
+      if (push) global.history.pushState({reviewList: href}, "", global.location.href);
+      return true;
+    }
+    function close(updateHistory = true) {
+      if (!active) return false;
+      if (active.closing && updateHistory) return true;
+      if ((!active.closing || ctx.busy()) && blocked(updateHistory)) return true;
+      if (closeProjectDetailSheet(elements, updateHistory)) return true;
+      const state = active;
+      if (updateHistory) { state.closing = true; global.history.back(); return true; }
+      ++navigationGeneration; unmount(state); for (const {node, placeholder} of state.feedback) { placeholder.parentNode.insertBefore(node, placeholder); placeholder.remove(); } active = null; state.host.remove(); restorePanel(elements, state);
+      elements.roadmapOutcomeDetailPanel.removeAttribute("data-expanded"); elements.roadmapOutcomeDetailPanel.style.removeProperty("--roadmap-sheet-height"); elements.roadmapOutcomeDetailPanel.style.removeProperty("--roadmap-detail-width");
+      let trigger = state.trigger;
+      if (!trigger || !trigger.isConnected) trigger = [...elements.reviewGuideSteps.querySelectorAll("a")].find((link) => link.getAttribute("href") === state.originHref);
+      if (trigger) trigger.focus({preventScroll: true}); if (typeof global.scrollTo === "function") global.scrollTo(0, state.scrollY);
+      return true;
+    }
+    function handlePopState(state) {
+      const navigation = ++navigationGeneration;
+      if (!active) return !!(state && state.reviewList && open({button: 0, preventDefault() {}}, state.reviewList, false));
+      const event = {button: 0, preventDefault() {}}, taskId = state && (state.taskDetailId || state.taskEditId);
+      if (taskId) {
+        if (taskDetailSheet && taskDetailSheet.id === taskId) {
+          if (!state.taskEditId && taskDetailSheet.edit) return close(false);
+          if (state.taskEditId && !taskDetailSheet.edit && taskDetailSheet.detail) openTaskEditSheet({event, elements, mount: taskDetailSheet.editMount, push: false});
+          return true;
+        }
+        ctx.details.openTask(event, taskId, () => active && active.screen.load(), false);
+        const task = taskDetailSheet;
+        if (state.taskEditId && task) void task.ready.then(() => { if (navigationGeneration === navigation && taskDetailSheet === task && task.detail) openTaskEditSheet({event: {button: 0, preventDefault() {}}, elements, mount: task.editMount, push: false}); });
+        return true;
+      }
+      if (state && state.projectDetailId) { if (taskDetailSheet) { if (blocked(false)) return true; if (taskDetailSheet.edit) closeTaskEditSheet(elements, false); closeTaskDetailSheet(elements, false); } if (!projectDetailSheet) ctx.details.openProject(event, state.projectDetailId, false); return true; }
+      if (state && state.reviewList) {
+        active.closing = false;
+        if (taskDetailSheet || projectDetailSheet) {
+          if (blocked(false)) return true;
+          if (taskDetailSheet && taskDetailSheet.edit) closeTaskEditSheet(elements, false);
+          closeProjectDetailSheet(elements, false);
+        }
+        if (active.href !== state.reviewList) open(event, state.reviewList, false);
+        return true;
+      }
+      if (taskDetailSheet || projectDetailSheet) {
+        if (blocked(false)) return true;
+        if (taskDetailSheet && taskDetailSheet.edit) closeTaskEditSheet(elements, false);
+        closeProjectDetailSheet(elements, false);
+      }
+      return close(false);
+    }
+    async function refresh(source) {
+      if (!active || active.closing) return false;
+      await ctx.refresh(active.screen, source); await ctx.details.refreshProject(source); return true;
+    }
+    return Object.freeze({open, close, refresh, currentHref, updateHref, handlePopState});
   }
   function restoreRoadmapDetail(elements) { restoreProjectDetail(elements); }
   function mountRoadmapDetail({elements, detail, snapshot, outcomeId, render, query, onBack}) { mountProjectDetail({elements, content: elements.roadmapOutcomeDetailContent, detail, snapshot, render, backText: "Outcomeへ戻る", backHref: query(outcomeId), onBack}); }
@@ -502,5 +639,5 @@
   function endRoadmapDetailResize(event, elements) { if (!roadmapResize || (event && event.pointerId !== roadmapResize.id)) return false; if (elements.roadmapDetailHandle.hasPointerCapture(roadmapResize.id)) elements.roadmapDetailHandle.releasePointerCapture(roadmapResize.id); roadmapResize = null; return true; }
   function closeRoadmapDetail(elements) { while (taskDetailSheet) { const edit = taskDetailSheet.edit; closeTaskDetailSheet(elements, false, false); if (taskDetailSheet && edit && taskDetailSheet.edit === edit) return false; } restoreProjectDetail(elements); endRoadmapDetailResize(null, elements); elements.roadmapOutcomeDetailPanel.style.removeProperty("--roadmap-sheet-height"); elements.roadmapOutcomeDetailPanel.style.removeProperty("--roadmap-detail-width"); elements.roadmapOutcomeDetailPanel.classList.remove("is-dragging"); return true; }
 
-  global.ProjectTaskBoard = Object.freeze({treePayload, buildForest, supportTasks, collapseContinuationChains, dependencyEdges, planEditorItems, primaryParent, fitZoom, centerScrollLeft, indentPx, moveOperation, createPlanEditor, mountPlanEditor, attachReorder, attachGesture, renderDetail, renderTaskRegions, refreshTaskPresentation, renderTaskDetail, renderTaskContinuations, drawDependencyLines, renderProjectDetailLineage, renderRoadmapProjectCard, renderRoadmapOutcomeCard, setupViewport, mountProjectDetail, restoreProjectDetail, openProjectDetailSheet, openTaskDetailSheet, openTaskEditSheet, closeTaskEditSheet, updateTaskDetailSheet, closeTaskDetailSheet, closeProjectDetailSheet, createEntityDetailController, mountRoadmapDetail, restoreRoadmapDetail, beginRoadmapDetailResize, moveRoadmapDetailResize, endRoadmapDetailResize, closeRoadmapDetail, projectPeriod, sortRoadmapProjectsByEstimatedPeriod});
+  global.ProjectTaskBoard = Object.freeze({treePayload, buildForest, supportTasks, collapseContinuationChains, dependencyEdges, planEditorItems, primaryParent, fitZoom, centerScrollLeft, indentPx, moveOperation, createPlanEditor, mountPlanEditor, attachReorder, attachGesture, renderDetail, renderTaskRegions, refreshTaskPresentation, renderTaskDetail, renderTaskContinuations, drawDependencyLines, renderProjectDetailLineage, renderRoadmapProjectCard, renderRoadmapOutcomeCard, setupViewport, mountProjectDetail, restoreProjectDetail, openProjectDetailSheet, openTaskDetailSheet, openTaskEditSheet, closeTaskEditSheet, updateTaskDetailSheet, closeTaskDetailSheet, closeProjectDetailSheet, createEntityDetailController, createReviewListController, mountRoadmapDetail, restoreRoadmapDetail, beginRoadmapDetailResize, moveRoadmapDetailResize, endRoadmapDetailResize, closeRoadmapDetail, projectPeriod, sortRoadmapProjectsByEstimatedPeriod});
 })(window);

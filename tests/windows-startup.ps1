@@ -139,6 +139,28 @@ try {
     Assert-True (-not [bool]($global:Calls -match 'capture-compose.json')) 'Disable must survive restart.'
     Write-Host 'Windows startup and capture configuration protection passed (Docker/OS boundaries simulated).'
 
+    # Future NX startup configuration: only synthetic profile + environment references.
+    Set-CaptureConfiguration -Disable
+    Set-OutlookConfiguration -Disable
+    $nxDir=Join-Path $tempRoot 'NXLocal';New-Item -ItemType Directory -Path $nxDir | Out-Null
+    $nxFile=Join-Path $nxDir 'profile.json'
+    $nxProfile=@{version=1;api_base='https://example.invalid/nx/api';allowed_host='example.invalid';user_id='21';timezone='Asia/Tokyo';granularity=5;required_categories=@();auth_mode='api_key';credential_env='MOKVIA_NX_TEST_CREDENTIAL';company_approved=$true}
+    [IO.File]::WriteAllText($nxFile,($nxProfile|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
+    Set-TimeTrackerConfiguration -File $nxFile
+    $nxOverride=Get-TimeTrackerComposeOverride
+    $nx=Get-Content -LiteralPath $nxOverride -Raw | ConvertFrom-Json
+    Assert-True ($nx.services.app.volumes[0].read_only -eq $true -and $nx.services.app.volumes[0].bind.create_host_path -eq $false) 'NX config mount must be read-only, with no creation.'
+    Assert-True ($nx.services.app.environment.MOKVIA_NX_TEST_CREDENTIAL -ceq '${MOKVIA_NX_TEST_CREDENTIAL-}') 'Compose file stores only an environment reference.'
+    Assert-True (($nx.services.app.command -join ' ') -match '--timetracker-config /nx-config/profile.json') 'Future NX configuration reaches the explicit runtime argument.'
+    Assert-True ($null -eq (Get-TimeTrackerComposeOverride -Maintenance)) 'Backup/restore never injects NX credentials or mounts profile.'
+    $combined=Get-Content -LiteralPath (Get-TimeTrackerComposeOverride -WithCapture -WithOutlook) -Raw | ConvertFrom-Json
+    Assert-True (($combined.services.app.command -join ' ') -match '--capture-folder /capture-inbox --outlook-folder /outlook-handoff') 'NX override preserves both existing input sources.'
+    $nxProfile.api_key='synthetic-forbidden-profile-value'
+    [IO.File]::WriteAllText($nxFile,($nxProfile|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
+    $rejected=$false;try { Get-TimeTrackerComposeOverride | Out-Null } catch { $rejected=$true }
+    Assert-True $rejected 'Secret-like profile fields must be refused before Docker.'
+    Set-TimeTrackerConfiguration -Disable
+    Assert-True ($null -eq (Get-TimeTrackerComposeOverride)) 'Disabling NX startup preserves data and omits credential injection.'
 } finally {
     $env:LOCALAPPDATA = $originalLocalAppData
     Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
