@@ -2069,12 +2069,7 @@ async function editReview(id) {
   try { const detail = await apiRequest(entityDetailPath("reviews", id)); if (!isCurrentGeneration("reviewEdit", generation)) return; if (safeFrontmatter(detail).review_kind !== activeReviewKind) throw new RequestFailure("reconciliation"); populateReview(detail); }
   catch (error) { if (isCurrentGeneration("reviewEdit", generation)) showRequestError(error); }
 }
-function progressRange() {
-  const end = activeReviewKind === "daily" ? tokyoToday() : defaultReviewDate("weekly");
-  const date = new Date(end + "T00:00:00Z");
-  if (activeReviewKind === "weekly") date.setUTCDate(date.getUTCDate() + 6);
-  return {from: activeReviewKind === "daily" ? end : defaultReviewDate("weekly"), to: activeReviewKind === "daily" ? end : date.toISOString().slice(0, 10)};
-}
+function progressRange() { return ProgressUI.range(activeReviewKind, tokyoToday(), defaultReviewDate("weekly")); }
 function setProgressOrigins(snapshot) {
   const selected = elements.progressOrigin.value;
   elements.progressOrigin.replaceChildren();
@@ -2088,17 +2083,9 @@ function setProgressOrigins(snapshot) {
   elements.progressOrigin.value = selected;
 }
 function resetProgressForm() { progressDetail = null; elements.progressForm.reset(); elements.progressOccurredOn.value = tokyoToday(); elements.pof.open = false; elements.progressPreview.textContent = "記録する"; setHidden(elements.progressCancel, true); }
-function renderProgress(items) {
-  elements.progressList.replaceChildren();
-  for (const item of items) {
-    const row = document.createElement("li"); row.className = "entity-row";
-    const title = document.createElement("strong"); title.textContent = item.title || "タイトルなし";
-    const meta = document.createElement("p"); meta.className = "entity-meta"; meta.textContent = [item.occurred_on, item.origin ? item.origin.kind + ": " + item.origin.title : "未分類"].join(" · ");
-    if (activeReviewKind === "daily") row.append(title, meta, actionButton("編集", () => editProgress(item.id)));
-    else { const link = document.createElement("a"); link.href = "/reviews/weekly?tab=daily&progress=" + encodeURIComponent(item.id); link.textContent = "Dailyで編集"; row.append(title, meta, link); }
-    elements.progressList.append(row);
-  }
-  elements.progressState.textContent = items.length ? items.length + "件あります。" : "記録はありません。";
+function renderProgress(items, range) {
+  const count = ProgressUI.render(elements.progressList, items, activeReviewKind, range, item => actionButton("編集", () => editProgress(item.id)));
+  elements.progressState.textContent = count ? count + "件あります。" : "記録はありません。";
 }
 async function editProgress(id) {
   if (mutationIsGated()) return;
@@ -2113,7 +2100,7 @@ async function editProgress(id) {
 }
 async function loadProgress(snapshot) {
   setProgressOrigins(snapshot); const range = progressRange(); const response = await apiRequest("/api/v1/progress?from=" + range.from + "&to=" + range.to);
-  renderProgress(Array.isArray(response.items) ? response.items : []); setHidden(elements.progressForm, activeReviewKind !== "daily");
+  renderProgress(Array.isArray(response.items) ? response.items : [], range); setHidden(elements.progressForm, activeReviewKind !== "daily");
 }
 elements.progressForm.addEventListener("submit", async (event) => {
   event.preventDefault(); if (!elements.progressForm.reportValidity() || mutationIsGated()) return;

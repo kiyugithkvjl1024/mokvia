@@ -27,5 +27,35 @@
     }
     select.value = value;
   }
-  root.ProgressUI = Object.freeze({PURPOSE, FLOW, body, parse, originFields, selectOrigin});
+  function range(kind, today, weekStart) {
+    const start = kind === "daily" ? today : weekStart;
+    const date = new Date(start + "T00:00:00Z");
+    date.setUTCDate(date.getUTCDate() + (kind === "daily" ? -1 : 6));
+    return kind === "daily" ? {from: date.toISOString().slice(0, 10), to: today} : {from: weekStart, to: date.toISOString().slice(0, 10)};
+  }
+  function render(list, items, kind, dates, editButton) {
+    list.replaceChildren();
+    function row(item) {
+      const element = document.createElement("li"); element.className = "entity-row"; element.dataset.progressId = item.id;
+      const title = document.createElement("strong"); title.textContent = item.title || "タイトルなし";
+      const meta = document.createElement("p"); meta.className = "entity-meta";
+      meta.textContent = [item.occurred_on, item.origin ? item.origin.kind + ": " + item.origin.title : "未分類"].join(" · ");
+      if (kind === "daily") element.append(title, meta, editButton(item));
+      else { const link = document.createElement("a"); link.href = "/reviews/weekly?tab=daily&progress=" + encodeURIComponent(item.id); link.textContent = "Dailyで編集"; element.append(title, meta, link); }
+      return element;
+    }
+    if (kind !== "daily") { for (const item of items) list.append(row(item)); return items.length; }
+    let count = 0;
+    for (const [date, label] of [[dates.from, "昨日"], [dates.to, "今日"]]) {
+      const group = document.createElement("li"); group.className = "progress-day-group"; group.dataset.progressDate = date;
+      const heading = document.createElement("h3"); heading.textContent = label + "（" + date + "）";
+      const entries = document.createElement("ul"); entries.className = "entity-list";
+      const selected = items.filter(item => item.occurred_on === date); count += selected.length;
+      for (const item of selected) entries.append(row(item));
+      if (!selected.length) { const empty = document.createElement("li"); empty.className = "entity-empty"; empty.textContent = label + "の記録はありません。"; entries.append(empty); }
+      group.append(heading, entries); list.append(group);
+    }
+    return count;
+  }
+  root.ProgressUI = Object.freeze({PURPOSE, FLOW, body, parse, originFields, selectOrigin, range, render});
 })(window);
