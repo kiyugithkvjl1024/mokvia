@@ -1309,3 +1309,6 @@ body.project-tree-maximized.roadmap-detail-open .roadmap-outcome-detail { z-inde
 
 .task-operation-card { position: relative; }
 .task-operation-card .entity-row-main { padding-right: 3.2rem; }
+
+.progress-day-group > h3 { margin: 0 0 .5rem; font-size: 1rem; }
+.progress-day-group > .entity-list > li:last-child { border-bottom: 0; }
