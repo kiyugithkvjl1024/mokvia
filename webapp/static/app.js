@@ -12,7 +12,7 @@ const REVIEW_STEPS = Object.freeze({
   daily: Object.freeze([
     {id: "inbox", label: "Inboxを確認した", purpose: "気がかりの見落としを防ぎ、判断が必要なものを未整理のまま残さないため。", action: "Inboxを上から確認し、意味が不明なもの、次の行動が未定のもの、今日扱う必要があるものを特定します。", href: "/inbox"},
     {id: "near_term", label: "Doingと今日から7日内のScheduled・dueを確認した", mobileLabel: "Doing・7日内を確認", purpose: "進行中の作業と直近の予定・期限の衝突や見落としを、今日の行動を決める前に見つけるため。", action: "Doingと今日から7日後までのScheduled・dueを確認し、今日対応するもの、延期・再調整するものを洗い出します。", href: "/tasks"},
-    {id: "commitments", label: "今日の約束を整えた", purpose: "希望ではなく、今日実際に引き受ける量を明確にし、過剰な約束を防ぐため。", action: "候補を一つずつ「今日やる／今日はやらない」に分け、今日やるものだけをNotesへ記録します。", href: "/tasks"},
+    {id: "commitments", label: "今日の約束を整えた", purpose: "希望ではなく、今日実際に引き受ける量を明確にし、過剰な約束を防ぐため。", action: "候補を一つずつ「今日やる／今日はやらない」に分け、必要なTaskの対応予定日と次の行動を更新します。Notesは任意です。", href: "/tasks"},
   ]),
   weekly: Object.freeze([
     {id: "clear", label: "Clear: Inboxを空に近づけた", description: "気がかりを集め、Inboxを確認します。", href: "/inbox"},
@@ -75,7 +75,7 @@ const elements = Object.freeze({
   purposeView: byId("purpose-view"), purposeForm: byId("purpose-form"), purposeTitle: byId("purpose-title"), purposeBody: byId("purpose-body"), purposesList: byId("purposes-list"), purposeState: byId("purpose-state"), purposePreview: byId("preview-purpose"), purposeCancel: byId("cancel-purpose-edit"), purposeArchive: byId("archive-purpose"), purposeDisclosure: byId("purpose-form-disclosure"),
   visionsView: byId("visions-view"), visionForm: byId("vision-form"), visionTitle: byId("vision-title"), visionStatus: byId("vision-status"), visionBody: byId("vision-body"), visionsList: byId("visions-list"), visionsState: byId("visions-state"), visionPreview: byId("preview-vision"), visionCancel: byId("cancel-vision-edit"), visionArchive: byId("archive-vision"), visionDisclosure: byId("vision-form-disclosure"),
   areasView: byId("areas-view"), areaForm: byId("area-form"), areaTitle: byId("area-title"), areaHealth: byId("area-health"), areaBody: byId("area-body"), areasList: byId("areas-list"), areasState: byId("areas-state"), areaPreview: byId("preview-area"), areaCancel: byId("cancel-area-edit"), areaArchive: byId("archive-area"), areaDisclosure: byId("area-form-disclosure"), areaDetail: byId("area-detail"), areaDetailContent: byId("area-detail-content"), areaDetailClose: byId("close-area-detail"),
-  reviewWorkflow: byId("review-workflow"), reviewForm: byId("review-form"), reviewsReload: byId("reload-reviews"),
+  reviewSaveStatus: byId("review-save-status"), reviewWorkflow: byId("review-workflow"), reviewForm: byId("review-form"), reviewsReload: byId("reload-reviews"),
   reviewHeading: byId("review-heading"), reviewTitle: byId("review-title"), reviewPeriod: byId("review-period-start"),
   reviewBody: byId("review-body"), reviewBodyLabel: byId("review-body-label"), reviewCancel: byId("cancel-review-edit"), reviewArchive: byId("archive-review"),
   reviewPreview: byId("preview-review"), reviewsState: byId("reviews-state"), reviewsList: byId("reviews-list"),
@@ -164,6 +164,7 @@ let reviewDetail = null;
 let activeReviewKind = "weekly";
 const REVIEW_TAB_KEY = "mokvia.review.tab.v1";
 let reviewDraftPeriod = null;
+let reviewPanel = null;
 let reviewGuideMarks = [];
 let progressDetail = null;
 let reviewGuideStatuses = [];
@@ -245,12 +246,14 @@ function setExternalMutationGate(scope, gated) {
   else { externalMutationGates.delete(scope); releaseMutationControlsIfIdle(); }
 }
 function gateMutationRecoveryRequired(committed = false) {
+  setHidden(elements.retryCurrent, false);
   mutationRecoveryRequired = true;
   if (committed) committedCleanupWarningPending = true;
   activePreview = null; activeMutation = null; setMutationDisabled(true); showMutationRecoveryRequired(committed);
   if (reloadFocus) reloadFocus.focus();
 }
 function gateUnknownApplyOutcome(attempt) {
+  setHidden(elements.retryCurrent, false);
   applyOutcomeUnknown = true; unknownAttempt = attempt; activePreview = null; activeMutation = null; setMutationDisabled(true); showUnknownApplyOutcome();
   if (reloadFocus) reloadFocus.focus();
 }
@@ -541,12 +544,6 @@ function showPreview(previewResponse) {
   technical.append(technicalSummary, technicalContent); elements.previewContent.append(summary, technical);
   elements.dialog.showModal(); elements.confirmPreview.focus();
 }
-function previewNeedsConfirmation(previewResponse) {
-  const operation = previewResponse && previewResponse.operation;
-  if (operation && (operation.action === "archive" || operation.action === "cycle_close")) return true;
-  if (Array.isArray(previewResponse && previewResponse.effects)) return previewResponse.effects.some((effect) => effect && (effect.role === "project_archived" || effect.role === "task_archived"));
-  return Boolean(previewResponse && previewResponse.proposed && previewResponse.proposed.archived === true);
-}
 function clearActivePreview() { activePreview = null; activeMutation = null; elements.previewContent.replaceChildren(); elements.dialog.close(); }
 function closePreview() {
   if (applyInFlight) return;
@@ -557,15 +554,17 @@ function closePreview() {
 async function previewMutation(operation, onSuccess, focus, preparationToken = null, options = {}) {
   if (preparationToken === null) { if (mutationIsGated()) return; }
   else if (!mutationPreparationInFlight || taskPreparationGeneration !== preparationToken) return;
+  const ownPreparation = preparationToken === null; if (ownPreparation) preparationToken = beginTaskPreparation();
   clearMessage(elements.error); clearMessage(elements.notice); setMutationDisabled(true);
   try {
+    operation = await taskSettings.confirmBlockedNext(operation, apiRequest, options.isCurrent, clarifyDetail); if (!operation) { options.onCancel?.(); return; }
     if (typeof options.onPreviewStart === "function" && options.onPreviewStart() === false) return;
     const previewResponse = await apiRequest("/api/v1/mutations/preview", {method: "POST", body: JSON.stringify(operation)});
     if (preparationToken !== null && (!mutationPreparationInFlight || taskPreparationGeneration !== preparationToken)) return;
     if (typeof options.isCurrent === "function" && !options.isCurrent()) return;
     activePreview = previewResponse;
     activeMutation = {onSuccess, onFailure: options.onFailure, onReadbackFailure: options.onReadbackFailure, onUnknown: options.onUnknown, onCommittedCleanup: options.onCommittedCleanup, localReload: options.localReload, isCurrent: options.isCurrent, onApplyStart: options.onApplyStart, onReadbackStart: options.onReadbackStart, focus, reopenCapture: options.reopenCapture === true, postReloadFocus: options.postReloadFocus, redirectTo: options.redirectTo || "", backgroundReload: options.backgroundReload === true};
-    if (previewNeedsConfirmation(activePreview)) showPreview(activePreview);
+    if (taskSettings.previewNeedsConfirmation(activePreview)) showPreview(activePreview);
     else if (options.awaitApply === true) await applyPreviewMutation();
     else void applyPreviewMutation();
   } catch (error) {
@@ -575,7 +574,7 @@ async function previewMutation(operation, onSuccess, focus, preparationToken = n
     const failureFocus = typeof options.failureFocus === "function" ? options.failureFocus() : options.failureFocus;
     if (failureFocus) failureFocus.focus(); else if (focus) focus.focus();
   }
-  finally { releaseMutationControlsIfIdle(); }
+  finally { if (ownPreparation) finishTaskPreparation(preparationToken); releaseMutationControlsIfIdle(); }
 }
 
 async function applyPreviewMutation() {
@@ -764,7 +763,7 @@ function setClarifyDependencies(detail, tasks, ids = dependencyIds(safeFrontmatt
 function renderClarifyContinuations(detail, tasks) { clarifyContinuationTasks = tasks; window.ProjectTaskBoard.renderTaskContinuations({content: elements.clarifyContinuations, detail, snapshot: {entities: tasks}, safeFrontmatter, taskStatusLabel, clarifyHref}); }
 function populateClarify(...args) { window.LocalCapture?.renderSource(args[0]); clarifyFormRuntime.populate(...args); renderClarifyContinuations(args[0], args[3]); }
 function syncClarifyProjectDetailLink() { const link = elements.clarifyProjectLink; if (!link) return; const id = elements.clarifyProject.value; link.hidden = !id; link.setAttribute("href", "/projects?level=projects&id=" + encodeURIComponent(id)); }
-function closeClarifyProjectDetail(updateHistory = true) { return P.closeProjectDetailSheet(elements, updateHistory); }
+function closeClarifyProjectDetail(updateHistory = true) { return reviewPanel?.close(updateHistory) || P.closeProjectDetailSheet(elements, updateHistory); }
 function syncClarifyAreaPicker(value = elements.clarifyArea.value) { clarifyFormRuntime.syncAreaPicker(value); }
 const clarifyFormRuntime = window.TaskPanelEditor.createForm({elements, detail: () => clarifyDetail, dependencies: () => clarifyDependencyIds, frontmatter: safeFrontmatter, serializeDependencies: serializeDependencyIds, normalizeDraft: taskSettings.normalizeDraft, scheduledTimestamp: clarifyScheduledTimestamp, availableFromValue, mountForm: taskSettings.mountForm, setDetail: (value) => { clarifyDetail = value; }, replaceOptions, syncProjectLink: syncClarifyProjectDetailLink, setCollections: (projects, areas, directAreaId) => { clarifyProjects = projects; clarifyAreas = areas; clarifyDirectAreaId = directAreaId; }, collections: () => ({projects: clarifyProjects, areas: clarifyAreas, directAreaId: clarifyDirectAreaId}), setDirectArea: (value) => { clarifyDirectAreaId = value; }, restoreDue: restoreDueInput, restoreAvailable: restoreAvailableFrom, restoreScheduled: restoreScheduledInput, setDependencies: setClarifyDependencies, dependencyIds, setSettings: (value) => { clarifySettingsForm = value; }, syncAdvanced: syncClarifyAdvancedDetails, statuses: TASK_STATUSES, contextsForInput});
 function captureClarifyDraft(){return clarifyFormRuntime.captureDraft();}
@@ -1333,8 +1332,10 @@ async function loadFocus() {
   finally { if (isCurrentGeneration("tasks", generation)) { taskReloadInFlight = false; elements.tasksReload.disabled = false; releaseMutationControlsIfIdle(); } }
 }
 elements.tasksForm.addEventListener("submit", async (event) => { event.preventDefault(); await loadFocus(); });
+const todayAddDialog = window.FocusCompleted.bindTodayAddDialog(byId, mutationIsGated, () => applyInFlight || mutationPreparationInFlight || Boolean(activePreview));
 if (elements.focusTodayAddForm) elements.focusTodayAddForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  todayAddDialog.clearError();
   const submittedTitle = elements.focusTodayAddTitle.value;
   if (!elements.focusTodayAddForm.reportValidity() || !submittedTitle.trim()) return;
   const token = beginTaskPreparation(); if (token === null) return;
@@ -1342,8 +1343,9 @@ if (elements.focusTodayAddForm) elements.focusTodayAddForm.addEventListener("sub
   try {
     await previewMutation(operation, () => {
       if (elements.focusTodayAddTitle.value === submittedTitle) elements.focusTodayAddTitle.value = "";
+      todayAddDialog.close();
       showNotice("今日やるTaskを追加しました。");
-    }, elements.focusTodayAddTitle, token, {awaitApply: true, postReloadFocus: () => elements.focusTodayAddTitle});
+    }, elements.focusTodayAddTitle, token, {awaitApply: true, onFailure: todayAddDialog.failed, onUnknown: todayAddDialog.failed, postReloadFocus: () => byId("focus-today-add-open")});
   } finally { finishTaskPreparation(token); }
 });
 elements.quickStartForm.addEventListener("submit", async (event) => {
@@ -1405,14 +1407,14 @@ function renderProjectFacts(snapshot) {
   if (!missing.length) appendListText(elements.projectFacts, "該当なし");
 }
 async function editOutcome(kind, id) {
-  if(mutationIsGated()||!U.c())return;
+  if(mutationIsGated()||!U.c(reviewPanel?.currentHref() ? elements.roadmapOutcomeDetailContent : document))return;
   if (kind === "projects") { nextGeneration("projects"); elements.projectsReload.disabled = false; }
   else { nextGeneration("goals"); elements.goalsReload.disabled = false; }
   const generation = nextGeneration("edit");
   try { const detail = await apiRequest(entityDetailPath(kind, id)); if (!isCurrentGeneration("edit", generation)) return; if (kind === "projects") populateProject(detail); else populateGoal(detail); }
   catch (error) { if (isCurrentGeneration("edit", generation)) showRequestError(error); }
 }
-function projectQuery() { return new URLSearchParams(location.search || ""); }
+function projectQuery() { return new URL(reviewPanel?.currentHref() || location.pathname + location.search, location.href).searchParams; }
 function projectLaneStatus(entity) { const status = safeFrontmatter(entity).status; return status === "active" ? "not_started" : status; }
 function canonicalProjectLane(status) {
   const snapshot = directionSnapshot && Array.isArray(directionSnapshot.entities) ? directionSnapshot : {entities: []};
@@ -1675,7 +1677,7 @@ function applyProjectFilters() {
   else for (const box of selectedProjectFilterBoxes(elements.projectFilterOutcome)) query.append("roadmap_outcome_id", box.value);
   for (const root of [elements.projectFilterArea, elements.projectFilterGoal, elements.projectFilterOutcome]) updateProjectFilterSummary(root);
   if (elements.projectFilterInactive.checked) query.set("show_inactive", "1");
-  history.replaceState(null, "", "/projects?" + query.toString());
+  if (!reviewPanel?.updateHref("/projects?" + query.toString())) history.replaceState(null, "", "/projects?" + query.toString());
   if (directionSnapshot && Array.isArray(directionSnapshot.entities)) renderProjects(directionSnapshot);
 }
 if (elements.projectFilters) {
@@ -1690,7 +1692,7 @@ if (elements.projectOtherTaskForm) elements.projectOtherTaskForm.addEventListene
 const projectPlanEditor = typeof window !== "undefined" && window.ProjectTaskBoard && elements.projectPlanRows ? window.ProjectTaskBoard.mountPlanEditor(elements.projectPlanRows) : null;
 function closeProjectPlanEditor() { elements.projectTaskPlanForm.hidden = true; elements.projectPlanTree.hidden = false; elements.projectPlanOpen.setAttribute("aria-expanded", "false"); }
 if (elements.projectTaskPlanForm) elements.projectTaskPlanForm.addEventListener("submit", async (event) => { event.preventDefault(); if (!projectDetail || !projectPlanEditor || !elements.projectTaskPlanForm.reportValidity()) return; const operation = projectPlanEditor.updatePayload(projectDetail.id, projectDetail.content_hash); await previewMutation(operation, () => { projectPlanEditor.markClean(); closeProjectPlanEditor(); }, elements.projectPlanRows.querySelector("input")); });
-if (elements.projectSupportForm) elements.projectSupportForm.addEventListener("submit", async (event) => { event.preventDefault(); if (!projectDetail) return; const fm = safeFrontmatter(projectDetail); await previewMutation({action: "update", kind: "projects", id: projectDetail.id, base_hash: projectDetail.content_hash, fields: {title: fm.title || "", status: fm.status || "not_started", goal_id: fm.goal_id || "", area_id: fm.area_id || "", roadmap_outcome_id: fm.roadmap_outcome_id || "", planned_start_date: fm.planned_start_date || "", planned_end_date: fm.planned_end_date || ""}, body: elements.projectSupportBody.value}, () => {}, elements.projectSupportBody); });
+if (elements.projectSupportForm) elements.projectSupportForm.addEventListener("submit", async (event) => { event.preventDefault(); if (!projectDetail) return; const fm = safeFrontmatter(projectDetail); await previewMutation({action: "update", kind: "projects", id: projectDetail.id, base_hash: window.MarkdownPreview?.baseHash(elements.projectSupportBody, projectDetail.content_hash) ?? projectDetail.content_hash, fields: {title: fm.title || "", status: fm.status || "not_started", goal_id: fm.goal_id || "", area_id: fm.area_id || "", roadmap_outcome_id: fm.roadmap_outcome_id || "", planned_start_date: fm.planned_start_date || "", planned_end_date: fm.planned_end_date || ""}, body: elements.projectSupportBody.value}, (applied) => { window.MarkdownPreview?.saved(elements.projectSupportBody, applied); if (elements.projectSupportBody.value === applied.body) window.U?.r(elements.projectSupportBody); }, elements.projectSupportBody); });
 if (elements.projectDetailStatus) elements.projectDetailStatus.addEventListener("change", () => { if (!projectDetail) return; const status = elements.projectDetailStatus.value, restore = applyOptimisticProjectDetailStatus(status); void previewProjectStatus(projectDetail.id, status, elements.projectDetailStatus, restore); });
 if (elements.projectPlanOpen) elements.projectPlanOpen.addEventListener("click", () => { if (projectPlanEditor && projectDetail && directionSnapshot && !mutationIsGated()) { if (!elements.projectTaskPlanForm.hidden) { projectPlanEditor.focusFirst(); return; } const tasks = window.ProjectTaskBoard.supportTasks(projectTasks(directionSnapshot, projectDetail.id), safeFrontmatter); projectPlanEditor.load(window.ProjectTaskBoard.planEditorItems(tasks, safeFrontmatter)); elements.projectPlanTree.hidden = true; elements.projectTaskPlanForm.hidden = false; elements.projectPlanOpen.setAttribute("aria-expanded", "true"); projectPlanEditor.focusFirst(); } });
 if (elements.projectPlanAddRoot) elements.projectPlanAddRoot.addEventListener("click", () => projectPlanEditor && projectPlanEditor.addRoot());
@@ -1764,7 +1766,7 @@ elements.purposeBody.value = PURPOSE_BODY;
 function hasActivePurpose() { return Boolean(directionSnapshot && Array.isArray(directionSnapshot.entities) && directionSnapshot.entities.some((entity) => entity.kind === "purposes" && entity.archived !== true)); }
 function resetDirectionForm(kind) { const controls = directionControls[kind]; directionDetails[kind] = null; controls.form.reset(); if (kind === "purposes") controls.body.value = PURPOSE_BODY; controls.preview.textContent = "作成"; setHidden(controls.cancel, true); setHidden(controls.archive, true); controls.disclosure.open = false; if (kind === "purposes" && hasActivePurpose()) setHidden(controls.disclosure, true); }
 function populateDirectionForm(kind, detail) { const controls = directionControls[kind]; const fm = safeFrontmatter(detail); directionDetails[kind] = detail; controls.title.value = fm.title || ""; controls.body.value = detail.body || ""; if (kind === "visions") elements.visionStatus.value = fm.status || "active"; if (kind === "areas") elements.areaHealth.value = fm.health || ""; controls.preview.textContent = "保存"; setHidden(controls.cancel, false); setHidden(controls.archive, false); if (kind === "purposes") setHidden(controls.disclosure, false); controls.disclosure.open = true; controls.title.focus();U.r(); }
-async function editDirection(kind, id) { if(mutationIsGated()||!U.c())return;try { const detail = await apiRequest(entityDetailPath(kind, id)); populateDirectionForm(kind, detail); if (kind === "areas") renderAreaDetail(detail); } catch (error) { showRequestError(error); } }
+async function editDirection(kind, id) { if(mutationIsGated()||!U.c(reviewPanel?.currentHref() ? elements.roadmapOutcomeDetailContent : document))return;try { const detail = await apiRequest(entityDetailPath(kind, id)); populateDirectionForm(kind, detail); if (kind === "areas") renderAreaDetail(detail); } catch (error) { showRequestError(error); } }
 function renderAreaDetail(detail) { const fm = safeFrontmatter(detail); const entities = directionSnapshot && Array.isArray(directionSnapshot.entities) ? directionSnapshot.entities : []; const projects = entities.filter((project) => project.kind === "projects" && safeFrontmatter(project).area_id === detail.id); const tasks = entities.filter((task) => task.kind === "tasks" && safeFrontmatter(task).area_id === detail.id && !safeFrontmatter(task).project_id); elements.areaDetailContent.replaceChildren(); const facts = document.createElement("p"); facts.textContent = "状態: " + (fm.health || "未確認") + " / 最終確認: " + (fm.last_reviewed_on || "未確認"); const body = document.createElement("pre"); body.textContent = detail.body || ""; const projectHeading = document.createElement("h3"); projectHeading.textContent = "関連Project"; const projectList = document.createElement("ul"); if (projects.length) for (const project of projects) appendListText(projectList, safeFrontmatter(project).title || project.id); else appendListText(projectList, "該当なし"); const taskHeading = document.createElement("h3"); taskHeading.textContent = "standalone Task"; const taskList = document.createElement("ul"); if (tasks.length) for (const task of tasks) appendListText(taskList, safeFrontmatter(task).title || task.id); else appendListText(taskList, "該当なし"); elements.areaDetailContent.append(facts, body, projectHeading, projectList, taskHeading, taskList); setHidden(elements.areaDetail, false); }
 elements.areaDetailClose.addEventListener("click", () => { setHidden(elements.areaDetail, true); elements.areaDetailContent.replaceChildren(); });
 for (const [kind, controls] of Object.entries(directionControls)) { controls.form.addEventListener("submit", async (event) => { event.preventDefault(); if (!controls.form.reportValidity()) return; const detail = directionDetails[kind]; const operation = detail ? {action: "update", kind, id: detail.id, base_hash: detail.content_hash, fields: controls.fields(), body: controls.body.value} : {action: "create", kind, fields: controls.fields(), body: controls.body.value}; await previewMutation(operation, async (applied) => { resetDirectionForm(kind); showNotice("保存しました: " + applied.path); }, controls.title); }); controls.cancel.addEventListener("click", () => resetDirectionForm(kind)); controls.archive.addEventListener("click", async () => { const detail = directionDetails[kind]; if (!detail) return; await previewMutation({action: "archive", kind, id: detail.id, base_hash: detail.content_hash}, async (applied) => { resetDirectionForm(kind); showNotice("アーカイブしました: " + applied.path); }, controls.title); }); }
@@ -1784,7 +1786,7 @@ function formatLocalDate(date) { const parts = localDateParts(date); return Stri
 function defaultReviewDate(kind) { const parts = tokyoToday().split("-").map(Number); const date = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2])); if (kind === "weekly") date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7)); return date.toISOString().slice(0, 10); }
 function validDate(value) { const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value); if (!match) return false; const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])); return formatLocalDate(date) === value; }
 function reviewDraftKey(kind = activeReviewKind, periodStart = elements.reviewPeriod.value) { return REVIEW_DRAFT_PREFIX + kind + ":" + periodStart; }
-function reviewNotesFromBody(kind) { const marker = "## Notes\n\n"; const body = kind === "daily" ? DAILY_REVIEW_BODY : WEEKLY_REVIEW_BODY; return body.slice(body.indexOf(marker) + marker.length).replace(/\n$/, ""); }
+function reviewNotesFromBody(kind) { if (kind === "daily") return ""; const marker = "## Notes\n\n"; const body = kind === "daily" ? DAILY_REVIEW_BODY : WEEKLY_REVIEW_BODY; return body.slice(body.indexOf(marker) + marker.length).replace(/\n$/, ""); }
 function reviewCompletedStepIds() { return elements.reviewStepControls.filter((control) => control && control.checked).map((control) => control.dataset.stepId).filter(Boolean); }
 function reviewBodyFromChecklist() { const checked = new Set(reviewCompletedStepIds()); const checklist = REVIEW_STEPS[activeReviewKind].map((step) => "- [" + (checked.has(step.id) ? "x" : " ") + "] " + step.label).join("\n"); const notesMarker = "## Notes\n\n"; const notes = elements.reviewBody.value.includes(notesMarker) ? elements.reviewBody.value.slice(elements.reviewBody.value.indexOf(notesMarker) + notesMarker.length).replace(/\n$/, "") : elements.reviewBody.value; return "\n## Checklist\n\n" + checklist + "\n\n## Notes\n\n" + notes + "\n"; }
 function showDraftStorageWarning() { setHidden(elements.reviewDraftWarning, false); }
@@ -1795,8 +1797,8 @@ function switchReviewDraftPeriod() { if (reviewDetail) return; const nextPeriod 
 function configureReviewChecklist() { const steps = REVIEW_STEPS[activeReviewKind]; for (let index = 0; index < elements.reviewStepControls.length; index += 1) { const control = elements.reviewStepControls[index]; const label = elements.reviewStepLabels[index]; const step = steps[index]; if (control) { control.dataset.stepId = step ? step.id : ""; control.checked = false; } if (label) label.textContent = step ? step.label : ""; } setHidden(elements.reviewStep4Row, steps.length < 4); }
 function syncDailyReviewGuideProgress() { if (activeReviewKind !== "daily" || !elements.dailyReviewProgress) return; const controls = elements.reviewStepControls.slice(0, REVIEW_STEPS.daily.length); const completed = controls.filter((control) => control && control.checked).length; elements.dailyReviewProgress.textContent = "3ステップ中" + completed + "件確認済み"; }
 function syncReviewGuideMarks() { for (let index = 0; index < reviewGuideMarks.length; index += 1) { const mark = reviewGuideMarks[index]; const status = reviewGuideStatuses[index]; const control = elements.reviewStepControls[index]; if (!mark) continue; const checked = Boolean(control && control.checked); const text = checked ? "確認済み" : "未確認"; mark.textContent = text; mark.setAttribute("aria-pressed", checked ? "true" : "false"); if (status) status.textContent = "（" + text + "）"; } syncDailyReviewGuideProgress(); }
-function reviewDate(value) { return typeof value === "string" ? value.slice(0, 10) : ""; }
-function taskReviewDates(entity) { const fm = safeFrontmatter(entity); return [fm.due, fm.action_date, fm.scheduled_start].map(reviewDate).filter(Boolean); }
+function reviewDate(value){return typeof value==="string"?value.slice(0,10):"";}
+const taskReviewDates=e=>{const f=safeFrontmatter(e);return[f.due,f.action_date,f.scheduled_start].map(reviewDate).filter(Boolean)};
 function reviewGuideFacts(snapshot, step) {
   const facts = snapshot && snapshot.facts && typeof snapshot.facts === "object" ? snapshot.facts : {};
   const entities = Array.isArray(snapshot && snapshot.entities) ? snapshot.entities : [];
@@ -1805,7 +1807,7 @@ function reviewGuideFacts(snapshot, step) {
   const title = (entity) => safeFrontmatter(entity).title || entity.id;
   if (step.id === "inbox" || step.id === "clear") { const count = Number.isInteger(facts.inbox_count) ? facts.inbox_count : 0; return [count ? "Inbox " + count + "件" : "Inboxは空です"]; }
   if (step.id === "near_term") { const items = tasks.filter((task) => safeFrontmatter(task).status === "doing" || taskReviewDates(task).some((date) => date >= today && date <= endDate)).map(title); return items.length ? items : ["進行中・7日内の予定や期限はありません"]; }
-  if (step.id === "commitments") { const items = tasks.filter((task) => taskReviewDates(task).includes(today)).map(title); return items.length ? items : ["今日の約束はありません"]; }
+  if(step.id==="commitments"){let a=tasks.filter(t=>taskReviewDates(t).includes(today));return a.length?[...a.map(title),a.reduce((s,t)=>s+(+safeFrontmatter(t).estimated_minutes||0),0)+"分"]:["今日の約束なし"];}
   if (step.id === "current") {
     const counts = facts.task_status_counts && typeof facts.task_status_counts === "object" ? facts.task_status_counts : {};
     const summary = "Task: Next " + (counts.next || 0) + "件 / Doing " + (counts.doing || 0) + "件 / Waiting " + (counts.waiting || 0) + "件 / Scheduled " + (counts.scheduled || 0) + "件 / Someday " + (counts.someday || 0) + "件";
@@ -1826,16 +1828,16 @@ function reviewGuideFacts(snapshot, step) {
 function reviewTabFromQuery(){const query=new URLSearchParams(location.search||"");if(query.has("tab")){const tab=query.get("tab");return tab==="weekly"||tab==="daily"||tab==="allocation"?tab:"daily";}try{const saved=localStorage.getItem(REVIEW_TAB_KEY);return saved==="weekly"||saved==="daily"||saved==="allocation"?saved:"daily";}catch(_error){return "daily";}}
 function persistReviewTab(tab){try{localStorage.setItem(REVIEW_TAB_KEY,tab);}catch(_error){}}
 function reviewHelpKindFromQuery(){return new URLSearchParams(location.search||"").get("tab")==="weekly"?"weekly":"daily";}
-function reviewGuidePurpose(kind){return kind==="daily"?"その日の判断を始める前に、未整理の気がかり、進行中の仕事、7日以内の予定・期限を確認し、今日引き受ける約束を実行可能な量に絞ります。":"約束・Project・Goalの全体を信頼できる状態に戻します。";}
-function reviewDoneCondition(kind){return kind==="daily"?"Inboxを把握し、Doing・7日内の日付項目から今日対応すべき項目を特定し、実行可能な今日の約束をNotesへ記録できた。":"Clear、Current、Creative、Goal整合を確認し、次の行動を見渡せる。";}
+function reviewGuidePurpose(kind){return kind==="daily"?"気がかりと直近の予定を確認し、必要な変更を反映します。朝は今日の約束を整え、夜は残ったことと次の行動を確認します。全リストの見直しはWeeklyで行います。":"約束・Project・Goalの全体を信頼できる状態に戻します。";}
+function reviewDoneCondition(kind){return kind==="daily"?"Inboxを把握し、Doing・7日内の日付項目から今日対応すべき項目を特定し、実行可能な今日の約束を整え、確認状況を保存できた。Notesは任意。":"Clear、Current、Creative、Goal整合を確認し、次の行動を見渡せる。";}
 function appendReviewStepExplanation(item, step) { const purpose = document.createElement("p"), action = document.createElement("p"); purpose.textContent = "目的: " + (step.purpose || step.description); action.textContent = "ここでやること: " + (step.action || step.description); item.append(purpose, action); }
 function renderReviewGuide(snapshot) {
   elements.reviewGuideSteps.replaceChildren();reviewGuideMarks=[];reviewGuideStatuses=[];elements.reviewGuide.dataset.reviewKind = activeReviewKind;elements.reviewHelpLink.href="/help/reviews?tab="+activeReviewKind;elements.reviewGuidePurpose.textContent=reviewGuidePurpose(activeReviewKind);setHidden(elements.dailyReviewProgress,activeReviewKind!=="daily");const compact=globalThis.matchMedia&&globalThis.matchMedia("(max-width: 760px)").matches;
   REVIEW_STEPS[activeReviewKind].forEach((step, index) => {
     const item = document.createElement("li"); const title = document.createElement("h3"); title.textContent = compact && step.mobileLabel || step.label;
     const list = document.createElement("ul"); const items = reviewGuideFacts(snapshot, step);
-    for (const fact of items.slice(0, 5)) appendListText(list, fact); if (items.length > 5) appendListText(list, "ほか" + (items.length - 5) + "件");
-    const link = document.createElement("a"); link.href = step.href; link.textContent = "確認する";
+    for (const fact of (step.id === "commitments" ? items : items.slice(0, 5))) appendListText(list, fact); if (step.id !== "commitments" && items.length > 5) appendListText(list, "ほか" + (items.length - 5) + "件");
+    const link = document.createElement("a"); link.href = step.href; link.textContent = "確認する"; link.addEventListener("click", (event) => reviewPanel?.open(event, step.href));
     const control = elements.reviewStepControls[index]; const mark = document.createElement("button"); mark.type = "button"; mark.className = "secondary review-step-mark";
     reviewGuideMarks[index] = mark; mark.addEventListener("click", () => { if (!control || reviewDetail) return; control.checked = !control.checked; persistReviewDraft(); syncReviewGuideMarks(); });
     {
@@ -1906,6 +1908,21 @@ let roadmapSelectedProjectId = "";
 let roadmapDetailRequest = 0;
 const P=globalThis.window&&window.ProjectTaskBoard;
 const detailPanels=P.createEntityDetailController({elements,apiRequest,entityDetailPath,safeFrontmatter,taskStatusLabel,clarifyHref,openTaskEditor:mountTaskPanelEditor,renderProject:renderProjectDetail,mountedProject:(detail,snapshot)=>{projectDetail=detail;directionSnapshot=snapshot;},failed:showRequestError});
+let reviewWorkspaceReturn = null;
+reviewPanel = P.createReviewListController?.({elements, details:detailPanels,
+  screenFor(href) { const path = new URL(href, location.href).pathname; return ({"/inbox":{node:elements.inboxWorkflow,title:"Inbox",load:loadInbox,key:"inbox"},"/tasks":{node:elements.tasksWorkflow,title:"Task",load:loadFocus,key:"tasks"},"/projects":{node:elements.projectsWorkflow,title:"Project・Goal",load:loadProjectKanban,key:"projects"}})[path]; },
+  activate(screen, href) {
+    if (!reviewWorkspaceReturn) reviewWorkspaceReturn = {loader:reloadCurrentRoute,focus:reloadFocus,level:activeDirectionLevel,tab:activeOutcomeTab};
+    reloadCurrentRoute = screen.load; reloadFocus = elements.retryCurrent;
+    if (screen.key === "projects") { const query = new URL(href, location.href).searchParams, level = query.get("level"); activeDirectionLevel = query.get("mode") === "review" ? "review" : (["purpose","visions","goals","areas","projects"].includes(level) ? level : "overview"); activeOutcomeTab = activeDirectionLevel === "goals" ? "goals" : "projects"; applyOutcomeView(); }
+  },
+  deactivate(screen) { cancelInboxDrag(); cancelProjectDrag(); nextGeneration(screen.key); nextGeneration("edit"); ++inboxStageLoad; if (screen.key === "tasks") { taskReloadInFlight = false; elements.tasksReload.disabled = false; releaseMutationControlsIfIdle(); } if (reviewWorkspaceReturn) { reloadCurrentRoute = reviewWorkspaceReturn.loader; reloadFocus = reviewWorkspaceReturn.focus; activeDirectionLevel = reviewWorkspaceReturn.level; activeOutcomeTab = reviewWorkspaceReturn.tab; reviewWorkspaceReturn = null; } },
+  refresh(screen, source) { if (screen.key === "inbox") renderInbox(source.entities, source.entities); else return screen.load(); },
+  busy:()=>applyInFlight||mutationPreparationInFlight,
+  canClose:root=>!window.U || window.U.c(root)
+});
+// Keep direction navigation in Review.
+elements.roadmapOutcomeDetailContent?.addEventListener("click", event => { const link = event.target.closest?.("a[href]"); if (!reviewPanel?.currentHref() || !link || link.target || link.hasAttribute("download")) return; const url = new URL(link.href, location.href); if (url.origin === location.origin && url.pathname === "/projects" && (!url.searchParams.has("id") || link === elements.projectDetailBack)) reviewPanel.open(event, url.pathname + url.search); });
 function roadmapProjectDetailPath(id) { return entityDetailPath("projects", id); }
 function roadmapQuery(outcomeId, projectId = "") { const url = new URL(window.location.href); if (outcomeId) url.searchParams.set("outcome", outcomeId); else url.searchParams.delete("outcome"); if (projectId) url.searchParams.set("project", projectId); else url.searchParams.delete("project"); return url.pathname + (url.searchParams.toString() ? "?" + url.searchParams : ""); }
 function roadmapDateForYear(date, year) { const parts = typeof date === "string" ? date.split("-") : []; const month = parts.length === 3 ? Number(parts[1]) : 12, day = parts.length === 3 ? Number(parts[2]) : 31; const maxDay = new Date(Date.UTC(year, month, 0)).getUTCDate(); return String(year).padStart(4, "0") + "-" + String(month).padStart(2, "0") + "-" + String(Math.min(day, maxDay)).padStart(2, "0"); }
@@ -2018,11 +2035,11 @@ if (elements.roadmapDetailHandle) {
   const sheetHeight = () => Math.round((sheetPanel.getBoundingClientRect().height / Math.max(window.innerHeight || 1, 1)) * 100);
   elements.roadmapDetailHandle.addEventListener("pointerdown", (event) => { if (P.beginRoadmapDetailResize(event,elements)) return; event.preventDefault(); roadmapSheetStartY = event.clientY; roadmapSheetStartHeight = Math.min(96, Math.max(58, sheetPanel.dataset.expanded === "true" ? 96 : sheetHeight())); roadmapSheetPointerId = event.pointerId; sheetPanel.classList.add("is-dragging"); elements.roadmapDetailHandle.setPointerCapture(event.pointerId); });
   elements.roadmapDetailHandle.addEventListener("pointermove", (event) => { if (P.moveRoadmapDetailResize(event,elements)) return; if (roadmapSheetStartY === null || event.pointerId !== roadmapSheetPointerId) return; const next = Math.min(96, Math.max(58, roadmapSheetStartHeight - ((event.clientY - roadmapSheetStartY) / Math.max(window.innerHeight || 1, 1)) * 100)); sheetPanel.style.setProperty("--roadmap-sheet-height", next + "dvh"); event.preventDefault(); });
-  elements.roadmapDetailHandle.addEventListener("pointerup", (event) => { if (P.endRoadmapDetailResize(event,elements)) return; if (roadmapSheetStartY === null || event.pointerId !== roadmapSheetPointerId) return; const delta = event.clientY - roadmapSheetStartY, startedCollapsed = roadmapSheetStartHeight <= 59; if (startedCollapsed && delta >= 72) { resetSheetPointer(event, true); closeRoadmapDetail(); return; } const expanded = delta < -24 || (!startedCollapsed && delta < 48); resetSheetPointer(event, true); if (expanded) sheetPanel.dataset.expanded = "true"; else sheetPanel.removeAttribute("data-expanded"); });
+  elements.roadmapDetailHandle.addEventListener("pointerup", (event) => { if (P.endRoadmapDetailResize(event,elements)) return; if (roadmapSheetStartY === null || event.pointerId !== roadmapSheetPointerId) return; const delta = event.clientY - roadmapSheetStartY, startedCollapsed = roadmapSheetStartHeight <= 59; if (startedCollapsed && delta >= 72) { resetSheetPointer(event, true); if (!closeClarifyProjectDetail()) closeRoadmapDetail(); return; } const expanded = delta < -24 || (!startedCollapsed && delta < 48); resetSheetPointer(event, true); if (expanded) sheetPanel.dataset.expanded = "true"; else sheetPanel.removeAttribute("data-expanded"); });
   elements.roadmapDetailHandle.addEventListener("pointercancel", (event) => { if (!P.endRoadmapDetailResize(event,elements)) resetSheetPointer(event); });
 }
-if (typeof document.addEventListener === "function") document.addEventListener("keydown", (event) => { if (!elements.roadmapOutcomeDetailPanel || elements.roadmapOutcomeDetailPanel.hidden) return; if (event.key === "Escape") { event.preventDefault(); if (!closeClarifyProjectDetail()) closeRoadmapDetail(); return; } if (event.key !== "Tab") return; const nodes = roadmapFocusables(); if (!nodes.length) return; const first = nodes[0], last = nodes[nodes.length - 1]; if (!nodes.includes(document.activeElement)) { event.preventDefault(); (event.shiftKey ? last : first).focus(); } else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); } });
-if (typeof window !== "undefined" && typeof window.addEventListener === "function") { window.addEventListener("beforeunload", (event) => { if (!(roadmapDetailDraft && roadmapDetailDraft.dirty)) return; event.preventDefault(); event.returnValue = ""; }); window.addEventListener("popstate", () => { if (closeClarifyProjectDetail(false)) return; const query = new URL(window.location.href).searchParams, outcomeId = query.get("outcome"), projectId = query.get("project") || "", changingOutcome = outcomeId !== roadmapSelectedOutcomeId; if (changingOutcome) { if (!roadmapConfirmDiscardDraft()) { roadmapRestoreDetailRoute(); return; } roadmapDetailDraft = null; roadmapDetailEditMode = false; } if (outcomeId && roadmapSnapshot) selectRoadmapOutcome(outcomeId, projectId); else if (!outcomeId && !elements.roadmapOutcomeDetailPanel.hidden) closeRoadmapDetail(true, false); }); }
+if (typeof document.addEventListener === "function") document.addEventListener("keydown", (event) => { if (!elements.roadmapOutcomeDetailPanel || elements.roadmapOutcomeDetailPanel.hidden) return; if (document.querySelector?.("dialog[open]")) return; if (event.key === "Escape") { event.preventDefault(); if (!closeClarifyProjectDetail()) closeRoadmapDetail(); return; } if (event.key !== "Tab") return; const nodes = roadmapFocusables(); if (!nodes.length) return; const first = nodes[0], last = nodes[nodes.length - 1]; if (!nodes.includes(document.activeElement)) { event.preventDefault(); (event.shiftKey ? last : first).focus(); } else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); } });
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") { window.addEventListener("beforeunload", (event) => { if (!(roadmapDetailDraft && roadmapDetailDraft.dirty)) return; event.preventDefault(); event.returnValue = ""; }); window.addEventListener("popstate", (event) => { if (reviewPanel?.handlePopState(event.state)) return; if (closeClarifyProjectDetail(false)) return; const query = new URL(window.location.href).searchParams, outcomeId = query.get("outcome"), projectId = query.get("project") || "", changingOutcome = outcomeId !== roadmapSelectedOutcomeId; if (changingOutcome) { if (!roadmapConfirmDiscardDraft()) { roadmapRestoreDetailRoute(); return; } roadmapDetailDraft = null; roadmapDetailEditMode = false; } if (outcomeId && roadmapSnapshot) selectRoadmapOutcome(outcomeId, projectId); else if (!outcomeId && !elements.roadmapOutcomeDetailPanel.hidden) closeRoadmapDetail(true, false); }); }
 const cycleStartDate = byId("cycle-start-date"); if (cycleStartDate) cycleStartDate.addEventListener("change", () => { if (!cycleStartDate.value) return; const start = new Date(cycleStartDate.value + "T00:00:00Z"); start.setUTCDate(start.getUTCDate() + 41); byId("cycle-end-date").value = start.toISOString().slice(0, 10); });
 async function loadRoadmap() {
   const generation = nextGeneration("roadmap"); const resolving = applyOutcomeUnknown || canonicalReloadRequired; if (!resolving) clearMessage(elements.error); elements.roadmapReload.disabled = true;
@@ -2031,8 +2048,8 @@ async function loadRoadmap() {
   finally { if (isCurrentGeneration("roadmap", generation)) elements.roadmapReload.disabled = false; }
 }
 if (elements.roadmapReload) elements.roadmapReload.addEventListener("click", loadRoadmap);
-function resetReviewForm(){reviewDetail=null;elements.reviewForm.reset();const date=defaultReviewDate(activeReviewKind);elements.reviewPeriod.value=date;elements.reviewTitle.value=date+(activeReviewKind==="daily"?" Daily Review":" Weekly Review");reviewDraftPeriod=date;elements.reviewBody.value=reviewNotesFromBody(activeReviewKind);elements.reviewBodyLabel.textContent="メモ";configureReviewChecklist();setHidden(elements.reviewChecklist,true);restoreReviewDraft(date);syncReviewGuideMarks();setHidden(elements.reviewCancel,true);setHidden(elements.reviewArchive,true);elements.reviewPreview.textContent="作成";elements.reviewDisclosure.open=false;}
-function populateReview(detail){if(detail.archived===true){reviewDetail=null;elements.reviewsState.textContent="このReviewはアーカイブされています: "+detail.id;return;}reviewDetail=detail;reviewDraftPeriod=null;const fm=safeFrontmatter(detail);elements.reviewTitle.value=fm.title||"";elements.reviewPeriod.value=fm.period_start||"";elements.reviewBody.value=detail.body||"";elements.reviewBodyLabel.textContent="Checklist / Notes";setHidden(elements.reviewChecklist,true);setHidden(elements.reviewCancel,false);setHidden(elements.reviewArchive,false);elements.reviewPreview.textContent="保存";elements.reviewDisclosure.open=true;elements.reviewTitle.focus();}
+function resetReviewForm(){if(elements.reviewSaveStatus)clearMessage(elements.reviewSaveStatus);reviewDetail=null;elements.reviewForm.reset();const date=defaultReviewDate(activeReviewKind);elements.reviewPeriod.value=date;elements.reviewTitle.value=date+(activeReviewKind==="daily"?" Daily Review":" Weekly Review");reviewDraftPeriod=date;elements.reviewBody.value=reviewNotesFromBody(activeReviewKind);elements.reviewBodyLabel.textContent="メモ";configureReviewChecklist();setHidden(elements.reviewChecklist,true);restoreReviewDraft(date);syncReviewGuideMarks();setHidden(elements.reviewCancel,true);setHidden(elements.reviewArchive,true);elements.reviewPreview.textContent="作成";elements.reviewDisclosure.open=activeReviewKind==="daily";window.ReviewHelpUI?.layout(elements,activeReviewKind);}
+function populateReview(detail){if(detail.archived===true){reviewDetail=null;elements.reviewsState.textContent="このReviewはアーカイブされています: "+detail.id;return;}reviewDetail=detail;reviewDraftPeriod=null;const fm=safeFrontmatter(detail);elements.reviewTitle.value=fm.title||"";elements.reviewPeriod.value=fm.period_start||"";elements.reviewBody.value=detail.body||"";elements.reviewBodyLabel.textContent="Checklist / Notes";setHidden(elements.reviewChecklist,true);setHidden(elements.reviewCancel,false);setHidden(elements.reviewArchive,false);elements.reviewPreview.textContent="保存";elements.reviewDisclosure.open=true;window.ReviewHelpUI?.layout(elements,activeReviewKind,true);elements.reviewTitle.focus();}
 async function editReview(id) {
   if (mutationIsGated()) return; const generation = nextGeneration("reviewEdit");
   try { const detail = await apiRequest(entityDetailPath("reviews", id)); if (!isCurrentGeneration("reviewEdit", generation)) return; if (safeFrontmatter(detail).review_kind !== activeReviewKind) throw new RequestFailure("reconciliation"); populateReview(detail); }
@@ -2077,7 +2094,7 @@ async function editProgress(id) {
     elements.progressTitle.value = fm.title || ""; elements.progressOccurredOn.value = fm.occurred_on || "";
     const origin = fm.project_id ? ["project", fm.project_id] : (fm.goal_id ? ["goal", fm.goal_id] : (fm.area_id ? ["area", fm.area_id] : ["", ""]));
     ProgressUI.selectOrigin(elements.progressOrigin, ...origin);
-    elements.progressBenefit.value = parsed.benefit; elements.progressEvidence.value = parsed.evidence; elements.pof.open = Boolean(elements.progressBenefit.value || elements.progressEvidence.value || origin[0]); elements.progressPreview.textContent = "保存"; setHidden(elements.progressCancel, false); elements.progressTitle.focus();
+    elements.progressBenefit.value = parsed.benefit; elements.progressEvidence.value = parsed.evidence; elements.pof.open = Boolean(elements.progressBenefit.value || elements.progressEvidence.value || origin[0]); elements.progressPreview.textContent = "保存"; setHidden(elements.progressCancel, false); byId("progress-entry")?.setAttribute("open", ""); elements.progressTitle.focus();
   } catch (error) { showRequestError(error); }
 }
 async function loadProgress(snapshot) {
@@ -2101,12 +2118,13 @@ elements.progressReportCopy.addEventListener("click", async () => {
   catch (_error) { elements.progressReportMarkdown.focus(); elements.progressReportMarkdown.select(); showNotice("コピーできないため、選択しました。コピーしてください。"); }
 });
 function renderReviews(snapshot){elements.reviewsList.replaceChildren();const reviews=snapshot.entities.filter(entity=>entity.kind==="reviews"&&safeFrontmatter(entity).review_kind===activeReviewKind);for(const entity of reviews){const actions=entity.archived===true?[]:[actionButton("編集",()=>editReview(entity.id))];elements.reviewsList.append(makeReviewRow(entity,actions));}elements.reviewsState.textContent=reviews.length?reviews.length+"件あります。":"Reviewはありません。";}
-async function loadReviews(){nextGeneration("reviewEdit");const generation=nextGeneration("reviews"),resolving=applyOutcomeUnknown||canonicalReloadRequired;if(!resolving)clearMessage(elements.error);elements.reviewsReload.disabled=true;try{const resolution=await reconcileUnknownAttempt();if(!isCurrentGeneration("reviews",generation))return;const snapshot=await apiRequest("/api/v1/snapshot");if(!isCurrentGeneration("reviews",generation))return;renderReviews(snapshot);renderReviewFacts(snapshot);renderReviewGuide(snapshot);if(globalThis.ProgressUI){await loadProgress(snapshot);const progressId=new URLSearchParams(location.search||"").get("progress");if(activeReviewKind==="daily"&&progressId)await editProgress(progressId);}renderInboxCount(snapshot);completeSuccessfulReload(resolution);}catch(error){if(isCurrentGeneration("reviews",generation)){showReloadFailure(error);elements.reviewsState.textContent="Reviewを読み込めませんでした。";}}finally{if(isCurrentGeneration("reviews",generation))elements.reviewsReload.disabled=false;}}
+async function loadReviews(){nextGeneration("reviewEdit");const generation=nextGeneration("reviews"),resolving=applyOutcomeUnknown||canonicalReloadRequired;if(!resolving)clearMessage(elements.error);elements.reviewsReload.disabled=true;try{const resolution=await reconcileUnknownAttempt();if(!isCurrentGeneration("reviews",generation))return;const snapshot=await apiRequest("/api/v1/snapshot");if(!isCurrentGeneration("reviews",generation))return;renderReviews(snapshot);renderReviewFacts(snapshot);renderReviewGuide(snapshot);await reviewPanel?.refresh(snapshot);if(globalThis.ProgressUI){await loadProgress(snapshot);const progressId=new URLSearchParams(location.search||"").get("progress");if(activeReviewKind==="daily"&&progressId)await editProgress(progressId);}renderInboxCount(snapshot);completeSuccessfulReload(resolution);}catch(error){if(isCurrentGeneration("reviews",generation)){showReloadFailure(error);elements.reviewsState.textContent="Reviewを読み込めませんでした。";}}finally{if(isCurrentGeneration("reviews",generation))elements.reviewsReload.disabled=false;}}
 elements.reviewForm.addEventListener("submit", async (event) => {
   event.preventDefault(); if (!elements.reviewForm.reportValidity()) return; if (!validDate(elements.reviewPeriod.value)) { elements.error.textContent = "対象日はYYYY-MM-DDの実在する日付で入力してください。"; setHidden(elements.error, false); elements.reviewPeriod.focus(); return; }
+  clearMessage(elements.reviewSaveStatus);
   const fields = {title: elements.reviewTitle.value, period_start: elements.reviewPeriod.value};
   const operation = reviewDetail ? {action: "update", kind: "reviews", id: reviewDetail.id, base_hash: reviewDetail.content_hash, fields, body: elements.reviewBody.value} : {action: "create", kind: "reviews", review_kind: activeReviewKind, fields, body: reviewBodyFromChecklist()};
-  const wasCreate = !reviewDetail; await previewMutation(operation, async (applied) => { if (wasCreate) clearReviewDraft(operation.review_kind, operation.fields.period_start); resetReviewForm(); showNotice("Reviewを保存しました: " + applied.path); }, elements.reviewTitle);
+  const wasCreate = !reviewDetail; await previewMutation(operation, async (applied) => { if (wasCreate) clearReviewDraft(operation.review_kind, operation.fields.period_start); resetReviewForm(); window.FocusCompleted.reviewSaved(elements.reviewSaveStatus, applied); showNotice(elements.reviewSaveStatus.textContent); }, elements.reviewTitle, null, {postReloadFocus: () => elements.reviewSaveStatus});
 });
 elements.reviewArchive.addEventListener("click", async () => { if (!reviewDetail || reviewDetail.archived === true) return; const operation = {action: "archive", kind: "reviews", id: reviewDetail.id, base_hash: reviewDetail.content_hash}; await previewMutation(operation, async (applied) => { resetReviewForm(); showNotice("Reviewをアーカイブしました: " + applied.path); }, elements.reviewTitle); });
 elements.reviewCancel.addEventListener("click", resetReviewForm); elements.reviewsReload.addEventListener("click", loadReviews);

@@ -28,7 +28,59 @@ function Invoke-Compose {
     }
     $captureOverride = Get-CaptureComposeOverride -Maintenance:$maintenance
     if ($captureOverride) { $files += @('-f', $captureOverride) }
+    $outlookOverride = Get-OutlookComposeOverride -Maintenance:$maintenance -WithCapture:([bool]$captureOverride)
+    if ($outlookOverride) { $files += @('-f', $outlookOverride) }
+    $nxOverride = Get-TimeTrackerComposeOverride -Maintenance:$maintenance -WithCapture:([bool]$captureOverride) -WithOutlook:([bool]$outlookOverride)
+    if ($nxOverride) { $files += @('-f', $nxOverride) }
     Invoke-Docker -Arguments (@('compose', '-p', 'mokvia') + $files + $Arguments)
+}
+
+# Store a non-secret profile path only; never read or save the credential value.
+function Assert-TimeTrackerProfile {
+    param([string]$File)
+    $full=[IO.Path]::GetFullPath($File)
+    $folder=Assert-CaptureFolder -Folder (Split-Path $full -Parent)
+    if ($full -match '(?i)OneDrive' -or !(Test-Path -LiteralPath $full -PathType Leaf)) { throw 'Use an existing unsynced company-local NX profile outside source/data.' }
+    $item=Get-Item -LiteralPath $full -Force
+    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.Length -gt 65536) { throw 'Unsafe NX profile file.' }
+    $profile=Get-Content -LiteralPath $full -Raw | ConvertFrom-Json
+    $expected=@('version','api_base','allowed_host','user_id','timezone','granularity','required_categories','auth_mode','credential_env','company_approved')
+    $names=@($profile.PSObject.Properties.Name)
+    if ($names.Count -ne $expected.Count -or @($names|Where-Object {$_ -notin $expected}).Count) { throw 'NX profile must contain only non-secret configuration fields.' }
+    $uri=[Uri]$profile.api_base
+    if ($profile.version -ne 1 -or $profile.company_approved -isnot [bool] -or !$profile.company_approved -or
+        $uri.Scheme -cne 'https' -or $uri.Port -ne 443 -or $uri.UserInfo -or $uri.Query -or $uri.Fragment -or
+        $uri.Host -cne $profile.allowed_host -or !$uri.AbsolutePath.EndsWith('/api') -or
+        $profile.user_id -cnotmatch '^[0-9]+$' -or $profile.credential_env -cnotmatch '^MOKVIA_NX_[A-Z0-9_]{1,64}$' -or
+        $profile.auth_mode -cnotin @('api_key','bearer') -or $profile.granularity -notin @(5,6,10,15)) { throw 'Invalid or unapproved NX configuration.' }
+    return @{file=$full;profile=$profile}
+}
+function Set-TimeTrackerConfiguration {
+    param([string]$File,[switch]$Disable)
+    $config=if ($Disable) { @{version=1;enabled=$false} } else { @{version=1;enabled=$true;file=(Assert-TimeTrackerProfile -File $File).file} }
+    $path=Join-Path $script:StateDir 'timetracker-reference.json';$temporary=$path+'.tmp'
+    [IO.File]::WriteAllText($temporary,($config|ConvertTo-Json -Compress),[Text.UTF8Encoding]::new($false))
+    Move-Item -LiteralPath $temporary -Destination $path -Force
+}
+function Get-TimeTrackerComposeOverride {
+    param([switch]$Maintenance,[switch]$WithCapture,[switch]$WithOutlook)
+    if ($Maintenance) { return $null }
+    $path=Join-Path $script:StateDir 'timetracker-reference.json'
+    if (!(Test-Path -LiteralPath $path)) { return $null }
+    $config=Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+    $names=@($config.PSObject.Properties.Name)
+    if ($config.version -ne 1 -or $config.enabled -isnot [bool] -or @($names|Where-Object {$_ -notin @('version','enabled','file')}).Count) { throw 'Invalid NX profile reference.' }
+    if (!$config.enabled) { return $null }
+    $checked=Assert-TimeTrackerProfile -File $config.file
+    $command=@('python3','-m','local_runtime','serve','--container','--timetracker-config','/nx-config/profile.json')
+    if ($WithCapture) { $command+=@('--capture-folder','/capture-inbox') }
+    if ($WithOutlook) { $command+=@('--outlook-folder','/outlook-handoff') }
+    $environment=@{};$name=$checked.profile.credential_env
+    $environment[$name]='${'+$name+'-}' # Compose inherits the process environment; file contains only a variable reference.
+    $override=@{services=@{app=@{command=$command;environment=$environment;volumes=@(@{type='bind';source=$checked.file.Replace('$','$$');target='/nx-config/profile.json';read_only=$true;bind=@{create_host_path=$false}})}}}
+    $output=Join-Path $script:StateDir 'compose.timetracker.json'
+    [IO.File]::WriteAllText($output,($override|ConvertTo-Json -Depth 10),[Text.UTF8Encoding]::new($false))
+    return $output
 }
 function Assert-Docker {
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { throw 'Install company-approved Docker with Linux containers first.' }
@@ -206,4 +258,32 @@ function Get-CaptureComposeOverride {
     }
     Write-AtomicCaptureJson -Path $overridePath -Value $override
     return $overridePath
+}
+
+# Non-secret local folder setting only. No account identity, token, or OAuth setup.
+function Set-OutlookConfiguration {
+    param([string]$Folder, [switch]$Disable)
+    $config = if ($Disable) { @{version=1;enabled=$false} } else { @{version=1;enabled=$true;folder=(Assert-CaptureFolder -Folder $Folder)} }
+    if (!$Disable -and $config.folder -match '(?i)OneDrive') { throw 'Outlook handoff must be an unsynced company-local folder.' }
+    $path=Join-Path $script:StateDir 'outlook-import.json'
+    $temporary=$path+'.tmp'
+    [IO.File]::WriteAllText($temporary,($config|ConvertTo-Json -Compress),[Text.UTF8Encoding]::new($false))
+    Move-Item -LiteralPath $temporary -Destination $path -Force
+}
+function Get-OutlookComposeOverride {
+    param([switch]$Maintenance, [switch]$WithCapture)
+    $path=Join-Path $script:StateDir 'outlook-import.json'
+    if (!(Test-Path -LiteralPath $path)) { return $null }
+    $config=Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+    $names=@($config.PSObject.Properties.Name)
+    if ($config.version -ne 1 -or $config.enabled -isnot [bool] -or @($names|Where-Object {$_ -notin @('version','enabled','folder')}).Count) { throw 'Invalid Outlook folder configuration.' }
+    if (!$config.enabled -or $Maintenance) { return $null }
+    $folder=Assert-CaptureFolder -Folder $config.folder
+    if ($folder -match '(?i)OneDrive') { throw 'Use an unsynced local Outlook folder.' }
+    $command=@('python3','-m','local_runtime','serve','--container','--outlook-folder','/outlook-handoff')
+    if ($WithCapture) { $command+=@('--capture-folder','/capture-inbox') }
+    $override=@{services=@{app=@{command=$command;volumes=@(@{type='bind';source=$folder.Replace('$','$$');target='/outlook-handoff';read_only=$false;bind=@{create_host_path=$false}})}}}
+    $output=Join-Path $script:StateDir 'compose.outlook.json'
+    [IO.File]::WriteAllText($output,($override|ConvertTo-Json -Depth 10),[Text.UTF8Encoding]::new($false))
+    return $output
 }

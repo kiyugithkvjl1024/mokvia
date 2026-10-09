@@ -20,3 +20,33 @@
 
 .local-notification-bar { display:flex; flex-wrap:wrap; align-items:center; gap:.75rem; margin:.5rem 0 1rem; font-size:.85rem; }
 .calendar-controls > select, .calendar-controls > input { width:auto; flex:0 1 auto; max-width:100%; }
+.outlook-event { border:1px solid #7198bd; border-left:4px solid #3974a6; border-radius:.4rem; padding:2px .35rem; background:#edf4fa; overflow:visible; font-size:.75rem; margin:.4rem 0; }
+.outlook-event > strong, .outlook-event > span { margin-left:28px; margin-right:24px; display:block; line-height:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.outlook-actual { background:#eaf5ee; border-color:#64927a; border-left-color:#38764f; }
+.outlook-event-actions { position:absolute; top:100%; left:0; min-width:170px; z-index:5; display:flex; flex-wrap:wrap; gap:.2rem; padding:.3rem; background:var(--surface,#fff); border:1px solid #7198bd; border-radius:.4rem; }
+.outlook-event-actions[hidden] {display:none;}
+.outlook-time-grid .outlook-event.outlook-actions-open {z-index:5;}
+.outlook-move {position:absolute;left:0;top:1px;}
+.outlook-actions-toggle {position:absolute;left:0;bottom:1px;}
+.outlook-event button { font-size:.7rem; padding:.2rem .35rem; min-height:28px; }
+.outlook-time-scroll { height:480px; overflow:auto; border:1px solid #d7e0e8; margin-top:.5rem; }
+.outlook-time-grid { position:relative; height:1440px; min-width:0; background:repeating-linear-gradient(to bottom,transparent 0,transparent 59px,#dae2e9 59px,#dae2e9 60px); }
+.outlook-hour { position:absolute; left:0; font-size:.6rem; color:#586c7b; }
+.outlook-time-grid .outlook-event { position:absolute; left:32px; right:2px; margin:0; z-index:1; min-height:50px; }
+.outlook-drag-handle { touch-action:none; cursor:grab; }
+.outlook-event .outlook-resize { position:absolute; right:0; left:auto; width:24px; z-index:3; overflow:hidden; opacity:.8; min-height:16px; height:16px; padding:0; cursor:ns-resize; }
+.outlook-resize-start { top:0; }.outlook-resize-end { bottom:0; }
+.outlook-event:hover .outlook-resize, .outlook-event:focus-within .outlook-resize { opacity:.8; }
+.outlook-dragging { outline:3px solid #628eac; }
+@media(max-width:850px){.outlook-event .outlook-resize{opacity:.8;min-height:24px;height:24px;}.outlook-time-grid .outlook-event{min-height:80px;}.outlook-event-actions button{min-height:44px;}.outlook-event{padding-top:2px;padding-bottom:2px;}}
+
+.calendar-grid[data-view="week"] { grid-template-columns:repeat(7,minmax(200px,1fr)); overflow-x:auto; }
+@media(max-width:850px){.calendar-grid[data-view="week"] {grid-template-columns:1fr;overflow-x:visible;}}
+
+@media(max-width:850px){.outlook-move{min-width:44px;min-height:44px;}.outlook-event > strong,.outlook-event > span{margin-left:44px;margin-right:44px;}.outlook-event .outlook-resize{width:44px;}}
+
+.outlook-event > .outlook-time-label {white-space:pre-line;}
+
+.integration-settings { margin-top:1rem; padding:1rem; border:1px solid var(--border,#627484); border-radius:8px; }
+.integration-setting-row { display:flex; align-items:center; gap:.75rem; min-height:44px; overflow-wrap:anywhere; }
+.integration-setting-row input { width:24px; height:24px; flex:0 0 24px; }

@@ -24,15 +24,15 @@
     }));
   }
 
-  function hasUnsavedChanges() {
-    return Array.from(document.querySelectorAll(FORM_SELECTOR)).some((form) => {
+  function hasUnsavedChanges(root = document) {
+    return Array.from(root.querySelectorAll(FORM_SELECTOR)).some((form) => {
       const baseline = baselineByForm.get(form);
       return baseline !== undefined && isActive(form) && baseline !== formValue(form);
     });
   }
 
-  function confirmDiscard() {
-    return !hasUnsavedChanges() || window.confirm("未保存の変更を破棄して移動しますか？");
+  function confirmDiscard(root = document) {
+    return !hasUnsavedChanges(root) || window.confirm("未保存の変更を破棄して移動しますか？");
   }
 
   function resetBaseline(target) {

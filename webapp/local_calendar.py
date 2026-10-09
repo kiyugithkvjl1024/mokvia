@@ -14,7 +14,7 @@ def _timestamp(value):
         return None
 
 
-def calendar_projection(store, view, date, *, now=None):
+def calendar_projection(store, view, date, *, now=None, external=()):
     """Return Monday-based 1/7/42 day grids, clipping timed items at JST midnight."""
     if view not in {'day', 'week', 'month'} or not isinstance(date, str) or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', date):
         raise InputError('invalid calendar view or date')
@@ -67,7 +67,17 @@ def calendar_projection(store, view, date, *, now=None):
         first = _timestamp(fm.get('work_started_at'))
         last = _timestamp(fm.get('work_ended_at'))
         provisional = fm.get('status') == 'doing' and not fm.get('work_ended_at')
-        timed(base, 'actual', first, current if provisional else last, provisional)
+        timed({**base,'actual_reference_id':'task:'+entity.entity_id}, 'actual', first, current if provisional else last, provisional)
+    for event in external:
+        base = {'id':event['key'], 'title':event['title'], 'status':'done' if event['local'].get('done') else 'scheduled', 'archived':False, 'external':True, 'provider_id':event.get('provider_id','external'), 'provider_label':event.get('provider_label','外部予定'), 'actual_reference_id':'external:'+event['key'] if event['local'].get('actual') else None, 'local':event['local'], 'presence':event['presence'], 'needs_review':event['needs_review'], 'cancelled':event['cancelled'], 'source_start':event['start'], 'source_end':event['end']}
+        actual=event['local'].get('actual')
+        first, last = _timestamp(actual['start'] if actual else event['start']), _timestamp(actual['end'] if actual else event['end'])
+        if event['all_day']:
+            day = max(first.date(), start)
+            while day < min(last.date(), end):
+                all_day(base, 'external', day.isoformat()); day += dt.timedelta(days=1)
+        else:
+            timed(base, 'external', first, last)
     for day in days:
         day['events'].sort(key=lambda e: (not e['all_day'], e.get('start',''), e['kind'], e['id']))
     return {'view': view, 'date': date, 'timezone': 'Asia/Tokyo', 'from': start.isoformat(), 'to_exclusive': end.isoformat(), 'days': days, 'mutation_state': {'recovery_required': snapshot.recovery_required}}

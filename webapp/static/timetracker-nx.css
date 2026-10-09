@@ -1,0 +1,18 @@
+.nx-panel { max-width:900px; margin:0 auto; padding:1rem; font:16px/1.6 system-ui,sans-serif; color:#17232f; background:#fff; }
+.nx-panel * { box-sizing:border-box; }
+.nx-panel h2 { font-size:1.5rem; }
+.nx-panel h3 { font-size:1.1rem; }
+.nx-panel button,.nx-panel input,.nx-panel select { font:inherit; min-height:44px; border:1px solid #627484; border-radius:6px; padding:.4rem .7rem; max-width:100%; }
+.nx-panel button { cursor:pointer; background:#edf4f9; color:#17232f; }
+.nx-panel button:disabled { cursor:default; opacity:.6; }
+.nx-panel :focus-visible { outline:3px solid #126cb5; outline-offset:2px; }
+.nx-mapping { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; border:1px solid #627484; padding:1rem; margin:1rem 0; }
+.nx-mapping label { display:flex; flex-direction:column; }
+.nx-record { display:flex; align-items:center; gap:.6rem; border-bottom:1px solid #627484; padding:.5rem 0; overflow-wrap:anywhere; }
+.nx-record input { flex:0 0 24px; width:24px; }
+.nx-actions { display:flex; flex-wrap:wrap; gap:.75rem; }
+.nx-results article { margin:1rem 0; padding:1rem; border:1px solid #627484; border-radius:8px; }
+.nx-results dl { display:grid; grid-template-columns:5rem minmax(0,1fr); }
+.nx-results dd { margin:0; overflow-wrap:anywhere; }
+.nx-results pre { white-space:pre-wrap; overflow-wrap:anywhere; }
+@media(max-width:600px) { .nx-mapping { grid-template-columns:1fr; } .nx-actions button { width:100%; } }

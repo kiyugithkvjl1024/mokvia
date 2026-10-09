@@ -1,6 +1,6 @@
 # mokvia 製品仕様
 
-会社PC内のDocker Linuxコンテナとブラウザで完結するMarkdownベースのmokviaです。アプリ実行中の外部API、AIモデル、クラウド保存、外部カレンダー同期はありません。会社承認済みCopilotは手動補助として利用します。
+会社PC内のDocker Linuxコンテナとブラウザで完結するMarkdownベースのmokviaです。既定では外部API、AIモデル、クラウド保存、外部カレンダー同期はありません。明示設定した会社PCのヘルパーだけが、手動要求時にOutlook COMまたはMicrosoft Graphを読み取ります。会社承認済みCopilotは手動補助として利用します。
 
 ## 保持する機能
 
@@ -21,3 +21,5 @@ Docker named volumeを永続データに使います。配布ソース内へ会�
 Teamsは初回配布に含めません。会社のクラウド禁止方針に対するCopilot/Teamsの承認範囲は会社に確認します。ユーザーが承認した範囲以上の外部送信は行いません。
 
 導入・受入確認は [SETUP-WINDOWS.md](SETUP-WINDOWS.md)、Copilot開始文は [COPILOT.md](COPILOT.md) を参照してください。
+
+Outlook manual import is opt-in and company-local. Graph uses only separately approved read-only Microsoft 365 access; classic Outlook uses local COM. Neither writes to Outlook. No OAuth/token setup is performed by this distribution. See docs/OUTLOOK-CALENDAR.md for deferred company acceptance.

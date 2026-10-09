@@ -83,7 +83,12 @@
     const rect = target.getBoundingClientRect(); layer.classList.add("is-drag-settling"); moveVisualDragLayer(layer, rect.left + 12, rect.top + 12);
     setTimeout(() => { clearVisualDragLayer(layer); if (complete) complete(); }, 120);
   }
-  function autoScroll(state, tick) { const edge = 56, height = window.innerHeight || 0, y = state.lastY, amount = y < edge ? -Math.ceil((edge - y) / 8) : (y > height - edge ? Math.ceil((y - (height - edge)) / 8) : 0); if (amount) window.scrollBy(0, amount); state.autoFrame = frame(tick); }
+  function autoScroll(state, tick) {
+    const panel = state.captureTarget?.closest?.(".roadmap-outcome-detail"), rect = panel ? panel.getBoundingClientRect() : {top: 0, bottom: window.innerHeight || 0}, edge = 56, y = state.lastY;
+    const amount = y < rect.top + edge ? -Math.ceil((rect.top + edge - y) / 8) : y > rect.bottom - edge ? Math.ceil((y - rect.bottom + edge) / 8) : 0;
+    if (amount) { if (panel) panel.scrollTop += amount; else window.scrollBy(0, amount); }
+    state.autoFrame = frame(tick);
+  }
   function beginAutoScroll(state, tick) { if (state.autoFrame) return; state.autoFrame = frame(tick); }
   function stopAutoScroll(state) { if (state && state.autoFrame) cancel(state.autoFrame); if (state) state.autoFrame = 0; }
   function laneDisclosureStorage() { try { return window.localStorage; } catch (_error) { return null; } }
