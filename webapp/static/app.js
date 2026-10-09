@@ -421,7 +421,7 @@ function projectMap(entities) {
 }
 function restoreAvailableFrom(v){[af.value,at.value]=Object.values(availableFromParts(v))}
 function taskMeta(entity,projects,includeProject=true){return taskSettings.taskMeta(entity,projects,includeProject,formatWorkTimestamp)}
-function makeTaskRow(entity, actions, projects, className = "") { return makeEntityRow(entity, actions, taskMeta(entity, projects), className); }
+function makeTaskRow(entity, actions, projects, className = "") { const row = makeEntityRow(entity, actions, taskMeta(entity, projects), className); row.dataset.taskId = entity.id; return row; }
 function tokyoDateTimeParts(date) {
   const values = {};
   for (const part of new Intl.DateTimeFormat("en-US-u-ca-gregory", {timeZone: "Asia/Tokyo", year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23"}).formatToParts(date)) {
@@ -548,6 +548,7 @@ function clearActivePreview() { activePreview = null; activeMutation = null; ele
 function closePreview() {
   if (applyInFlight) return;
   const mutation = activeMutation; const focus = mutation && mutation.focus; clearActivePreview();
+  if (mutation && mutation.onCancel) mutation.onCancel();
   if (mutation && mutation.reopenCapture) { elements.captureDialog.showModal(); elements.captureTitle.focus(); }
   releaseMutationControlsIfIdle(); if (focus && !(mutation && mutation.reopenCapture)) focus.focus();
 }
@@ -563,7 +564,7 @@ async function previewMutation(operation, onSuccess, focus, preparationToken = n
     if (preparationToken !== null && (!mutationPreparationInFlight || taskPreparationGeneration !== preparationToken)) return;
     if (typeof options.isCurrent === "function" && !options.isCurrent()) return;
     activePreview = previewResponse;
-    activeMutation = {onSuccess, onFailure: options.onFailure, onReadbackFailure: options.onReadbackFailure, onUnknown: options.onUnknown, onCommittedCleanup: options.onCommittedCleanup, localReload: options.localReload, isCurrent: options.isCurrent, onApplyStart: options.onApplyStart, onReadbackStart: options.onReadbackStart, focus, reopenCapture: options.reopenCapture === true, postReloadFocus: options.postReloadFocus, redirectTo: options.redirectTo || "", backgroundReload: options.backgroundReload === true};
+    activeMutation = {onSuccess, onCancel: options.onCancel, onFailure: options.onFailure, onReadbackFailure: options.onReadbackFailure, onUnknown: options.onUnknown, onCommittedCleanup: options.onCommittedCleanup, localReload: options.localReload, isCurrent: options.isCurrent, onApplyStart: options.onApplyStart, onReadbackStart: options.onReadbackStart, focus, reopenCapture: options.reopenCapture === true, postReloadFocus: options.postReloadFocus, redirectTo: options.redirectTo || "", backgroundReload: options.backgroundReload === true};
     if (taskSettings.previewNeedsConfirmation(activePreview)) showPreview(activePreview);
     else if (options.awaitApply === true) await applyPreviewMutation();
     else void applyPreviewMutation();
@@ -1140,9 +1141,9 @@ function focusBoardCards() { return [elements.focusSectionTodayList, elements.fo
 function setArchiveTarget(hidden){if(archiveDrop){archiveDrop.hidden=hidden;archiveDrop.classList.remove("focus-drop-target");}}
 let focusDragDock = null;
 function clearFocusDragDock() { ProjectKanbanMotion.clearDestinationDock(focusDragDock); focusDragDock = null; }
-function clearFocusDropTargets(){for(const key of ["today","dated","undated"]){const section=focusSectionButton(key).closest(".focus-action-section");if(section)section.classList.remove("focus-drop-target");}if(archiveDrop)archiveDrop.classList.remove("focus-drop-target");}
-function resolveFocusDropSection(event){const destination=ProjectKanbanMotion.destinationAt(focusDragDock,event);if(destination)return destination;const hit=typeof document.elementFromPoint==="function"?document.elementFromPoint(event.clientX,event.clientY):null;if(hit&&hit.closest&&hit.closest("#focus-archive-drop-target")===archiveDrop&&archiveDrop.getBoundingClientRect().bottom<=(window.innerHeight||0)-56)return "archive";const exact=hit&&hit.closest?hit.closest(".focus-action-section"):null;if(exact&&exact.dataset.focusSection)return exact.dataset.focusSection;let nearest=null,distance=Number.POSITIVE_INFINITY;for(const key of ["today","dated","undated"]){const section=focusSectionButton(key).closest(".focus-action-section");if(!section)continue;const rect=section.getBoundingClientRect(),current=Math.abs(event.clientY-(rect.top+rect.height/2));if(current<distance){nearest=key;distance=current;}}return nearest;}
-function emphasizeFocusDropTarget(event){clearFocusDropTargets();const key=resolveFocusDropSection(event);if(key === "archive" && archiveDrop){archiveDrop.classList.add("focus-drop-target");return;}const section=key&&focusSectionButton(key).closest(".focus-action-section");if(section)section.classList.add("focus-drop-target");}
+function clearFocusDropTargets(){for(const key of ["today","dated","undated"]){const section=focusSectionButton(key)?.closest(".focus-action-section");if(section)section.classList.remove("focus-drop-target");}if(archiveDrop)archiveDrop.classList.remove("focus-drop-target");}
+function resolveFocusDropSection(event){const destination=ProjectKanbanMotion.destinationAt(focusDragDock,event);if(destination)return destination;const hit=typeof document.elementFromPoint==="function"?document.elementFromPoint(event.clientX,event.clientY):null;if(hit&&hit.closest&&hit.closest("#focus-archive-drop-target")===archiveDrop&&archiveDrop.getBoundingClientRect().bottom<=(window.innerHeight||0)-56)return "archive";const exact=hit&&hit.closest?hit.closest(".focus-action-section"):null;if(exact&&exact.dataset.focusSection)return exact.dataset.focusSection;return null;}
+function emphasizeFocusDropTarget(event){clearFocusDropTargets();const key=resolveFocusDropSection(event);if(key === "archive" && archiveDrop){archiveDrop.classList.add("focus-drop-target");return;}const section=key&&focusSectionButton(key)?.closest(".focus-action-section");if(section)section.classList.add("focus-drop-target");}
 function optimisticFocusMove(entity, changes) {
   const card = focusBoardCards().find((value) => value.dataset.taskId === entity.id); if (!card) return () => {};
   const fields = safeFrontmatter(entity); if (!changes) return () => {};
@@ -1156,7 +1157,7 @@ async function moveFocusTask(entity, actionDate, focus) {
   try {
     const detail = await apiRequest(entityDetailPath("tasks", entity.id)), changes = window.TaskCard.focusMoveFields(detail, actionDate); if (!changes || Object.entries(changes).every(([key, value]) => (safeFrontmatter(detail)[key] || "") === value)) return;
     restore = optimisticFocusMove(entity, changes); const operation = {action: "update", kind: "tasks", id: detail.id, base_hash: detail.content_hash, fields: changes};
-    await previewMutation(operation, () => showNotice("対応予定日を保存しました。"), focus, null, {onFailure: restore});
+    await previewMutation(operation, () => showNotice("対応予定日を保存しました。"), focus, null, {onFailure: restore, onCancel: restore});
   } catch (error) { if (restore) restore(); showRequestError(error); if (focus) focus.focus(); }
 }
 async function archiveFocusTask(entity,focus){try{const detail=await apiRequest(entityDetailPath("tasks",entity.id));const operation={action:"archive",kind:"tasks",id:detail.id,base_hash:detail.content_hash};await previewMutation(operation,(applied)=>showNotice("Taskをアーカイブしました: "+applied.path),focus);}catch(error){showRequestError(error);if(focus)focus.focus();}}
@@ -1195,6 +1196,12 @@ function openFocusDueDialog(entity, trigger) {
   focusDueContext = {entity, trigger}; elements.focusDueDate.value = safeFrontmatter(entity).due || "";
   elements.focusDueDialog.showModal(); elements.focusDueDate.focus();
 }
+function focusOperations(entity, trigger, today, allTasks, card) {
+  return window.TaskCard.focusOperations(entity,trigger,today,allTasks,card,{mutationIsGated, apiRequest, entityDetailPath, safeFrontmatter, RequestFailure, previewMutation, showCompleted: async () => { focusCompletedMode = "all"; await loadFocus(); }, showRequestError, taskStartBlockReason, prepareTaskWorkflow, moveFocusTask, openFocusMoveMenu, openFocusDueDialog, workSessionEligible, openWorkSessionEditor,bind:attachFocusOperationDrag});
+}
+function attachFocusOperationDrag(handle, model, entity) {
+  window.TaskCard.bindFocusOperations(handle,model,entity,{mutationIsGated, safeFrontmatter, resolveFocusDropSection, clearFocusDragDock, setArchiveTarget, emphasizeFocusDropTarget, clearFocusDropTargets, archiveFocusTask, setDock: value => { focusDragDock = value; }});
+}
 function renderFocusBoard(tasks, projects, allTasks, facts) {
   if (!elements.focusActionBoard || !window.TaskCard) return;
   const today = focusToday(facts), sections = window.TaskCard.focusSections(tasks, today); focusBoardToday = today;
@@ -1203,11 +1210,11 @@ function renderFocusBoard(tasks, projects, allTasks, facts) {
     const collapsed = focusCollapsed[section.key] === true; button.setAttribute("aria-expanded", String(!collapsed)); button.lastElementChild.textContent = section.tasks.length + "件"; list.hidden = collapsed;
     for (const entity of section.tasks) {
       const fm = safeFrontmatter(entity), project = projects.get(fm.project_id), meta = taskMeta(entity, projects, false); if (window.TaskCard.isOverdueActionDate(entity, today)) meta.unshift("対応予定日超過");
-      const start = actionButton("開始", () => prepareTaskWorkflow("start", entity, start, "tasks"), true);
-      const dateAction = actionButton("対応予定日", () => openFocusMoveMenu(entity, dateAction, today, true));
-      const dueAction = actionButton("期限", () => openFocusDueDialog(entity, dueAction));
-      const card = window.TaskCard.createTaskCard({task: entity, href: clarifyHref(entity.id), metadata: meta, project: project ? {id: project.id, title: safeFrontmatter(project).title || project.id, href: "/projects?level=projects&id=" + encodeURIComponent(project.id)} : null, handleLabel: "対応予定日を移動またはアーカイブ", onHandleActivate: () => openFocusMoveMenu(entity, handle, today), actions: [dateAction, dueAction, start]}); detailPanels.t(card,entity,loadFocus); const handle = card.querySelector(".task-card-handle");
-      window.TaskCard.attachPointerDrag(handle, {threshold: 8, isGated: mutationIsGated, resolveTarget: resolveFocusDropSection, onActivate: (event) => { clearFocusDragDock(); focusDragDock = ProjectKanbanMotion.createDestinationDock([{key: "today", label: "今日やる"}, {key: "undated", label: "予定日なし"}, {key: "dated", label: "予定日あり"}], event); setArchiveTarget(false); }, onTrack: emphasizeFocusDropTarget, onCancel: () => { clearFocusDragDock(); clearFocusDropTargets(); setArchiveTarget(true); }, onDrop: (target) => { clearFocusDragDock(); clearFocusDropTargets(); setArchiveTarget(true); if (target === "archive") { void archiveFocusTask(entity, handle); return; } if (target === window.TaskCard.classifyFocusTask(entity, today)) return; if (target === "dated") openFocusMoveMenu(entity, handle, today, true); else void moveFocusTask(entity, target === "today" ? today : "", handle); }});
+      let card, model;
+      const operation = actionButton("操作", () => window.TaskCard.openOperations(model, operation, mutationIsGated), true);
+      card = window.TaskCard.createTaskCard({task: entity, href: clarifyHref(entity.id), metadata: meta, project: project ? {id: project.id, title: safeFrontmatter(project).title || project.id, href: "/projects?level=projects&id=" + encodeURIComponent(project.id)} : null, handleLabel: "Taskをドラッグして操作", onHandleActivate: () => window.TaskCard.openOperations(model, operation, mutationIsGated), actions: [operation]}); detailPanels.t(card,entity,loadFocus); const handle = card.querySelector(".task-card-handle");
+      model = focusOperations(entity, operation, today, allTasks, card);
+      attachFocusOperationDrag(handle, model, entity);
       list.append(card);
     }
     if (!section.tasks.length) appendEmptyState(list, "Taskはありません。");
@@ -1248,12 +1255,17 @@ function renderTasks(entities, completeEntities, presetEntities, facts) {
   elements.quickStartSubmit.textContent = "開始";
   setHidden(elements.breakStart, Boolean(currentDoingTask && isBreakTask(currentDoingTask)));
   if(currentDoingTask){
-    const complete = actionButton("完了", () => prepareTaskWorkflow("complete", currentDoingTask, complete, "tasks"), true);
-    const actions = [];
-    if (!isBreakTask(currentDoingTask)) { const interrupt = actionButton("中断", () => prepareTaskWorkflow("interrupt", currentDoingTask, interrupt, "tasks"), true); actions.push(interrupt); }
-    actions.push(complete);
+    const entity = currentDoingTask; let model;
+    const operation = actionButton("操作", () => window.TaskCard.openOperations(model, operation, mutationIsGated), true);
+    const complete = actionButton("完了", () => prepareTaskWorkflow("complete", entity, complete, "tasks"), true);
+    const actions = isBreakTask(entity) ? [complete] : [operation];
     const areas=completeEntities.filter((entity)=>entity.kind==="areas"&&entity.archived!==true);
     const rendered=currentTaskCard(currentDoingTask,actions,projects,areas),actionRow=rendered.card.querySelector?.(".card-actions");(actionRow||rendered.card).append(elements.focusSecondaryActions);elements.tasksCurrentList.append(rendered.card);
+    if (!isBreakTask(entity)) {
+      model = focusOperations(entity, operation, focusToday(facts), allTasks, rendered.card);
+      const handle = window.TaskCard.operationHandle(model, operation, mutationIsGated); rendered.card.append(handle);
+      attachFocusOperationDrag(handle, model, entity);
+    }
     if (rendered.update && (isBreakTask(currentDoingTask) || elapsedFor(currentDoingTask, true) !== null)) { currentTimerWin=focusPipController ? focusPipController.timerWindow() : globalThis; currentElapsedInterval=currentTimerWin.setInterval(rendered.update, 1000); }
   }
   const tasks = entities.filter((entity) => entity.kind === "tasks" && (!currentDoingTask || entity.id !== currentDoingTask.id));
@@ -1271,9 +1283,11 @@ function renderTasks(entities, completeEntities, presetEntities, facts) {
   }
   if (!incomplete.length) appendEmptyState(elements.tasksIncompleteList, "条件に合うTaskはありません。");
   for (const entity of completed) {
-    const actions = [];
-    if (workSessionEligible(entity)) { const edit = actionButton("実績を編集", () => openWorkSessionEditor(entity, edit), true); edit.className += " work-session-edit-trigger"; edit.setAttribute("data-work-session-task-id", entity.id); actions.push(edit); }
-    elements.tasksCompletedList.append(taskCard(entity, actions, projects, false, true, allTasks).card);
+    let card, model;
+    const operation = actionButton("操作", () => window.TaskCard.openOperations(model, operation, mutationIsGated), true);
+    card = taskCard(entity, [operation], projects, false, true, allTasks).card;
+    model = focusOperations(entity, operation, focusToday(facts), allTasks, card);
+    elements.tasksCompletedList.append(card);
   }
   if (!completed.length && focusCompletedMode === "today") appendEmptyState(elements.tasksCompletedList, "今日の完了済みTaskはありません。");
   if (elements.completedHeading) elements.completedHeading.textContent = focusCompletedMode === "all" ? "全期間の完了済み" : "今日の完了済み";

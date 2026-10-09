@@ -1,0 +1,30 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert/strict');
+const context={window:{},document:{}};vm.createContext(context);vm.runInContext(fs.readFileSync('webapp/static/task-card.js','utf8'),context);
+const card=context.window.TaskCard,calls=[];
+const handlers=Object.fromEntries(['start','interrupt','complete','reopen','continue','today','dated','undated','due','details','actual'].map(key=>[key,()=>calls.push(key)]));
+const keys=model=>Array.from(model,a=>a.key);
+const next=card.operations('task',{status:'next'},handlers);
+assert.deepEqual(keys(next),['start','complete','today','dated','undated','due','details']);
+assert.deepEqual(keys(card.operations('task',{status:'doing'},handlers)),['interrupt','complete','due','details']);
+assert.deepEqual(keys(card.operations('task',{status:'done'},handlers)),['continue','due','details']);
+assert.deepEqual(keys(card.operations('meeting',{done:false,editable:true},handlers)),['complete','actual']);
+assert.deepEqual(keys(card.operations('meeting',{done:true,editable:false},handlers)),['reopen']);
+assert.deepEqual(keys(card.operations('meeting',{done:false,unavailable:true},handlers)),[]);
+assert.equal(next.some(a=>/時刻/.test(a.label)),false,'General Task dock has no scheduled time operation');
+assert.equal(next.find(a=>a.key==='dated').label,'日付を選ぶ');
+assert.deepEqual(keys(card.dropOperations(next)),['start','complete','today','dated','undated','due','details']);
+const blocked=card.operations('task',{status:'next',startBlocked:'未完了の依存'},handlers);assert.equal(blocked.find(a=>a.key==='start').disabled,true);assert.equal(keys(card.dropOperations(blocked)).includes('start'),false);
+assert.equal(keys(card.operations('task',{status:'done',timer_kind:'break'},handlers)).includes('continue'),false);
+assert.equal(keys(card.operations('task',{status:'done'},handlers)).includes('reopen'),false);
+next.find(a=>a.key==='start').run();assert.deepEqual(calls,['start'],'One explicit operation delegates once to existing workflow');
+(async()=>{
+ const previews=[],failures=[],entity={id:'synthetic',frontmatter:{status:'next'}},ctx={mutationIsGated:()=>false,safeFrontmatter:value=>value.frontmatter,taskStartBlockReason:()=>'',entityDetailPath:()=>'/synthetic',RequestFailure:Error,previewMutation:async operation=>previews.push(operation),showCompleted:async()=>{},showRequestError:error=>failures.push(error),workSessionEligible:()=>false};
+ ctx.apiRequest=async()=>({id:'synthetic',content_hash:'a'.repeat(64),frontmatter:{status:'doing',work_started_at:'2026-10-09T01:00:00Z'}});
+ const model=card.focusOperations(entity,{},'2026-10-09',[],{classList:{add(){}}},ctx);await model.find(action=>action.key==='complete').run();assert.equal(previews.length,0,'A stale unstarted menu cannot complete a now measured Task');assert.equal(failures.length,1);
+ ctx.apiRequest=async()=>({id:'synthetic',content_hash:'b'.repeat(64),frontmatter:{status:'next'}});await model.find(action=>action.key==='complete').run();assert.equal(previews.length,1);assert.deepEqual(JSON.parse(JSON.stringify(previews[0].fields)),{status:'done'},'Completion does not invent or overwrite actual timestamps');
+
+ const original={id:'done-original',kind:'tasks',archived:false,frontmatter:{title:'Original',status:'done',project_id:'p',area_id:'a',due:'2026-10-15',contexts:'[office]',estimated_minutes:'20',depends_on:'[upstream]',work_started_at:'2026-10-09T01:00:00Z',work_ended_at:'2026-10-09T01:20:00Z',calendar_id:'private-calendar',calendar_event_id:'private-event',timer_ends_at:'private',remote_id:'nx-entry',scheduled_start:'2026-10-12T01:00:00Z'},body:'User body\n[gtd-focus-monitor] 通知停止期限: 2026-10-09T22:00:00+09:00\n[gtd-focus-monitor] 通知停止期限: 2026-02-30T22:00:00+09:00\nUnknown comment\n'};
+ const copy=card.continuationOperation(original,'2026-10-12');assert.deepEqual(JSON.parse(JSON.stringify(copy.fields)),{title:'Original',status:'next',continuation_of:'done-original',project_id:'p',area_id:'a',due:'2026-10-15',contexts:'[office]',estimated_minutes:'20',depends_on:'[upstream]',action_date:'2026-10-12'});assert.equal(copy.body,'User body\n[gtd-focus-monitor] 通知停止期限: 2026-02-30T22:00:00+09:00\nUnknown comment\n');assert.equal(card.continuationOperation(original,'').fields.action_date,undefined);const yearZero='[gtd-focus-monitor] 通知停止期限: 0000-01-01T22:00:00+09:00\n';assert.equal(card.continuationOperation({...original,body:yearZero},'').body,yearZero);assert.throws(()=>card.continuationOperation({...original,frontmatter:{status:'doing'}},''));
+ let resolveDetail,reads=0;const beforeCopies=previews.length;ctx.apiRequest=()=>{reads++;return new Promise(resolve=>{resolveDetail=resolve;});};const first=card.createContinuation(original,'',{},ctx),second=card.createContinuation(original,'',{},ctx);resolveDetail(original);await Promise.all([first,second]);assert.equal(reads,1);assert.equal(previews.length,beforeCopies+1,'Double clicks issue one copy intent');assert.equal(original.frontmatter.work_ended_at,'2026-10-09T01:20:00Z');ctx.mutationIsGated=()=>true;await card.createContinuation(original,'',{},ctx);assert.equal(reads,1,'Unknown/recovery gate prevents retry');
+ console.log('Task operations: capabilities, state/date grouping, shared menu/drop actions, no invented time, safe continuation copy and retry gates passed');
+})().catch(error=>{console.error(error);process.exitCode=1;});

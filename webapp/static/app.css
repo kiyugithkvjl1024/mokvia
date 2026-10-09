@@ -342,6 +342,16 @@ textarea:focus-visible { border-color: var(--focus-ring); }
 .drag-destination[data-active="true"] { border-color: var(--accent); background: var(--accent-soft); outline: 2px solid var(--accent); }
 .drag-destination[data-danger="true"] { color: var(--danger); }
 .drag-destination[data-danger="true"][data-active="true"] { border-color: var(--danger); background: var(--danger-soft); outline-color: var(--danger); }
+.drag-operation-dock { max-height: min(65vh, 32rem); overflow-y: auto; }
+.drag-operation-dock .drag-destination-grid { display: block; }
+.drag-operation-group + .drag-operation-group { margin-top: .65rem; }
+.drag-operation-group :is(h3, summary) { margin: 0 0 .35rem; font-size: .85rem; }
+.drag-operation-row, .task-operations-row { display: flex; flex-wrap: wrap; gap: .4rem; }
+.drag-operation-row > *, .task-operations-row > button { flex: 1 1 6rem; min-height: 44px; }
+.task-operations-dialog { width: min(30rem, calc(100vw - 2rem)); max-height: 80vh; overflow-y: auto; }
+.task-operations-dialog h2 { margin-top: 0; }
+.task-operations-dialog h3, .task-operations-dialog summary { font-size: 1rem; }
+.task-operations-dialog details { margin: 1rem 0; }
 .inbox-lane-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .65rem; }
 .inbox-lane { min-height: 9rem; display: grid; align-content: center; gap: .6rem; padding: 1rem; border: 1px dashed color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: .65rem; color: var(--accent-strong); background: var(--surface-soft); font-weight: 750; cursor: pointer; }
 .inbox-lane span { color: var(--muted); font-size: .84rem; font-weight: 400; }
@@ -1296,3 +1306,6 @@ body.project-tree-maximized.roadmap-detail-open .roadmap-outcome-detail { z-inde
 }
 
 .roadmap-detail-open :is(.inbox-drag-layer, .project-drag-layer, .drag-destination-dock, .focus-archive-drop-target) { z-index: 64; }
+
+.task-operation-card { position: relative; }
+.task-operation-card .entity-row-main { padding-right: 3.2rem; }
