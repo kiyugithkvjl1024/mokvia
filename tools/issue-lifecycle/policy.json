@@ -42,7 +42,9 @@
     "docs/ISSUE-LIFECYCLE.md",
     "AGENTS.md"
   ],
-  "transitional_prs": [],
+  "transitional_prs": [
+    6
+  ],
   "deployment_workflows": [
     ".github/workflows/company-distribution.yml"
   ]
