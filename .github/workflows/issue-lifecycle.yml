@@ -1,0 +1,35 @@
+# Candidate only. Install gate.py and policy.json at tools/issue-lifecycle/ first.
+# Run trusted base code only; PR body is data, never a shell command.
+name: Issue lifecycle
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+  issues:
+    types: [edited, reopened, closed]
+concurrency:
+  group: issue-lifecycle-${{ github.repository }}
+  cancel-in-progress: false
+permissions:
+  actions: read
+  contents: read
+  issues: read
+  pull-requests: read
+  checks: write
+  deployments: read
+jobs:
+  issue-lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Check Issue start and acceptance mapping
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: python3 tools/issue-lifecycle/ci_check.py

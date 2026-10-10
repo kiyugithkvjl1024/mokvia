@@ -11,3 +11,8 @@ Validate source changes with python3 -m unittest discover -s tests. Optional dev
 Public changes contain only generic code, documents, and synthetic tests. The copyright holder approved the current individually permitted use terms in LICENSE. Public source visibility is not permission for unrestricted execution, modification, or redistribution. Preserve prior MIT grants and third-party notices. New third-party assets or code still require appropriate rights and notices.
 
 Outlook manual import is opt-in and company-local. Graph uses only separately approved read-only Microsoft 365 access; classic Outlook uses local COM. Neither writes to Outlook. No OAuth/token setup is performed by this distribution. See docs/OUTLOOK-CALENDAR.md for deferred company acceptance.
+
+
+## Development Issue lifecycle
+
+Before new code/config implementation, use an open Issue in this repository with a requirement and stable acceptance IDs. Run the trusted start broker from a clean independent work branch before editing. PRs must include complete Issue references and the head-bound lifecycle manifest; do not add automatic-closing links/keywords. Finish with successful applicable tests, required release verification and latest exact-target approval, then record evidence and close/read back the Issue. Failed, pending, unapproved or unknown work stays open. Reopened/changed contracts require a new start. Existing work uses only an explicitly approved, exact-head retrospective transition, never a fabricated pre-start receipt. See [Issue lifecycle](docs/ISSUE-LIFECYCLE.md). This development rule does not turn ordinary task-data edits into software implementation.
