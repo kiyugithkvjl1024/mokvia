@@ -56,3 +56,5 @@ Required-status enforcement must be configured separately after checking real he
 Limits: local edits and hooks can be bypassed; ignored/other local files are not monitored. Commit timestamps can be manipulated. Acceptance descriptions and test sufficiency still require review. A repository writer with `checks:write` can publish the same check name through another Actions workflow: standard required-status rules pin the app, not the workflow. CLI finish rejects such forged evidence; fully preventing merge that way requires a distinct trusted app or a required-workflow rule, which this installation does not create. Owner/admin changes to trusted workflows/policy, manual close and dynamic changes between checks remain authority/operation boundaries.
 
 Tests: `cd tools/issue-lifecycle && python3 -m unittest discover -s tests -v`.
+
+Live verification probe: validate the trusted start receipt and head-bound CI before enabling required status.
