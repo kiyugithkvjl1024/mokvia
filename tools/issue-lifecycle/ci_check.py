@@ -7,14 +7,15 @@ from pathlib import Path
 from gate import Gate, GitHub, pr_manifest, require
 
 
-def run(api, policy, number):
+def run(api, policy, number, listed_head=None):
     gate = Gate(api, policy)
-    pr = api.call(f'{gate.root}/pulls/{number}')
-    head = pr['head']['sha']
+    head = listed_head or api.call(f'{gate.root}/pulls/{number}')['head']['sha']
     check = api.call(f'{gate.root}/check-runs', 'POST', {'name': 'issue-lifecycle', 'head_sha': head,
                     'status': 'in_progress', 'started_at': dt.datetime.now(dt.timezone.utc).isoformat()})
     error = None
     try:
+        pr = api.call(f'{gate.root}/pulls/{number}')
+        require(pr['head']['sha'] == head, 'listed PR head changed')
         all_open = api.pages(f'{gate.root}/pulls?state=open')
         same_head = [p['number'] for p in all_open if p['head']['sha'] == head]
         require(number in same_head, 'PR no longer open')
@@ -45,15 +46,15 @@ def run(api, policy, number):
 def recheck_open(api, policy):
     # Recheck every open head: queued events may replace one another, and
     # one Issue may affect multiple PRs. Publish all heads before failing job.
-    numbers = [p['number'] for p in api.pages('repos/' + policy['repository'] + '/pulls?state=open')]
+    pulls = api.pages('repos/' + policy['repository'] + '/pulls?state=open')
     results, failures, seen = [], [], set()
-    for number in numbers:
-        head = api.call('repos/' + policy['repository'] + '/pulls/' + str(number))['head']['sha']
+    for pull in pulls:
+        number, head = pull['number'], pull['head']['sha']
         if head in seen:
             continue
         seen.add(head)
         try:
-            results.append(run(api, policy, number))
+            results.append(run(api, policy, number, head))
         except Exception as exc:
             failures.append(f'PR {number}: {exc}')
     return {'results':results,'failures':failures}

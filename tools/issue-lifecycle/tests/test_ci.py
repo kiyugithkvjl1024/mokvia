@@ -54,4 +54,17 @@ class CITests(unittest.TestCase):
         self.assertEqual({c['head_sha'] for c in api.checks},{HEAD,'d'*40})
         self.assertTrue(all(c['conclusion']=='failure' for c in api.checks))
 
+    def test_first_detail_get_failure_invalidates_listed_head_and_continues(self):
+        api=self.fixture();first=api.data[ROOT+'/pulls/10']
+        second=copy.deepcopy(first);second.update(number=11,head={'sha':'d'*40},body='No Issue')
+        api.data[ROOT+'/pulls/11']=second;api.data[ROOT+'/pulls?state=open'].append(second)
+        original=api.call
+        def fail_detail(path,method='GET',data=None):
+            if path==ROOT+'/pulls/10' and method=='GET':raise GateError('API unavailable')
+            return original(path,method,data)
+        api.call=fail_detail;result=recheck_open(api,POLICY)
+        self.assertEqual(len(result['failures']),2)
+        self.assertEqual({c['head_sha'] for c in api.checks},{HEAD,'d'*40})
+        self.assertTrue(all(c['conclusion']=='failure' for c in api.checks))
+
 if __name__=='__main__':unittest.main()
