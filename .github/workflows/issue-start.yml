@@ -1,0 +1,40 @@
+name: Issue start receipt
+on:
+  workflow_dispatch:
+    inputs:
+      issues:
+        description: JSON array of Issue numbers
+        required: true
+      base_sha:
+        description: Current trusted base SHA
+        required: true
+      branch:
+        description: Work branch identity only (never checked out)
+        required: true
+      run:
+        description: Request correlation ID
+        required: true
+permissions:
+  contents: read
+  issues: write
+  actions: read
+jobs:
+  start-receipt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Validate base and publish trusted start receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/issue-lifecycle/start_receipt.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: issue-start-receipts
+          path: /tmp/receipts.json
+          retention-days: 90

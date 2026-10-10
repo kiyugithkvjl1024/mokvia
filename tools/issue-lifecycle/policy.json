@@ -1,0 +1,49 @@
+{
+  "repository": "kiyugithkvjl1024/mokvia",
+  "base_branch": "main",
+  "approvers": [
+    "kiyugithkvjl1024"
+  ],
+  "start_issuers": [
+    "github-actions[bot]"
+  ],
+  "start_workflow": ".github/workflows/issue-start.yml",
+  "required_checks": [
+    {
+      "name": "linux",
+      "app_id": 15368,
+      "workflow": ".github/workflows/ci.yml"
+    },
+    {
+      "name": "windows-syntax",
+      "app_id": 15368,
+      "workflow": ".github/workflows/ci.yml"
+    }
+  ],
+  "tool_checks": [
+    {
+      "name": "issue-gate-tests",
+      "app_id": 15368,
+      "workflow": ".github/workflows/issue-gate-tests.yml"
+    }
+  ],
+  "deployment_environments": [
+    "company-distribution"
+  ],
+  "deployment_issuers": [
+    "github-actions[bot]"
+  ],
+  "no_runtime_paths": [
+    "tools/issue-lifecycle/*",
+    ".github/workflows/issue-lifecycle.yml",
+    ".github/workflows/issue-start.yml",
+    ".github/workflows/issue-gate-tests.yml",
+    ".github/workflows/release-validation.yml",
+    "docs/ISSUE-LIFECYCLE.md",
+    "AGENTS.md"
+  ],
+  "transitional_prs": [],
+  "deployment_workflows": [
+    ".github/workflows/company-distribution.yml"
+  ]
+}
