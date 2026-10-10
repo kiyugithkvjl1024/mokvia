@@ -47,12 +47,46 @@ class RuntimeTest(unittest.TestCase):
             root=pathlib.Path(t); r.initialize(root)
             n=r.Notifications(root)
             at=dt.datetime(2026,10,1,9,0,tzinfo=dt.timezone(dt.timedelta(hours=9)))
-            n.publish('one','One',at); n.publish('one','One',at)
+            n.publish('one','One',at,'focus_anomaly'); n.publish('one','One',at,'focus_anomaly')
             first=n.current(at); self.assertEqual('One',first['text'])
-            n.publish('two','Two',at+dt.timedelta(hours=2))
+            n.publish('two','Two',at+dt.timedelta(hours=2),'focus_anomaly')
             self.assertEqual('Two',n.current(at+dt.timedelta(hours=2))['text'])
             n.heartbeat(at); self.assertTrue(n.current(at)['native_active'])
             self.assertFalse(n.current(at+dt.timedelta(seconds=91))['native_active'])
+    def test_quiet_publish_and_current_discard_without_backlog(self):
+        import local_runtime as r
+        from webapp.notification_preferences import Preferences
+        with tempfile.TemporaryDirectory() as temp:
+            root=pathlib.Path(temp);r.initialize(root);p=Preferences(root)
+            value=p.read();value.update(quiet_enabled=True,timezone='Asia/Tokyo');p.update(value)
+            n=r.Notifications(root);before=dt.datetime.fromisoformat('2026-10-09T21:59:50+09:00');quiet=before+dt.timedelta(seconds=10)
+            n.publish('before','Before',before,'focus_reminder');self.assertEqual('Before',n.current(before)['text'])
+            self.assertIsNone(n.current(quiet)['id'])
+            self.assertIsNone(n.current(before)['id'])  # Policy/time change cannot resurrect.
+            n.publish('quiet','Quiet',quiet,'break_finished');self.assertIsNone(n.current(quiet)['id'])
+            morning=dt.datetime.fromisoformat('2026-10-10T08:00:00+09:00');n.publish('quiet','Quiet',morning,'break_finished')
+            self.assertIsNone(n.current(morning)['id'])
+            n.publish('fresh','Fresh',morning,'focus_anomaly');self.assertEqual('Fresh',n.current(morning)['text'])
+            value=p.read();value['types']['focus_anomaly']=False;p.update(value)
+            self.assertIsNone(n.current(morning)['id'])
+            value=p.read();value['types']['focus_anomaly']=True;p.update(value)
+            self.assertIsNone(n.current(morning)['id'])
+
+    def test_quiet_break_completes_after_sleep_and_settings_backup_roundtrip(self):
+        import local_runtime as r
+        from webapp.notification_preferences import Preferences
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as temp,tempfile.TemporaryDirectory() as output:
+            root=pathlib.Path(temp);r.initialize(root);p=Preferences(root);value=p.read();value.update(quiet_enabled=True,timezone='Asia/Tokyo');p.update(value)
+            start=dt.datetime.fromisoformat('2026-10-09T21:59:00+09:00');morning=dt.datetime.fromisoformat('2026-10-10T08:10:00+09:00')
+            with contextlib.closing(Store(root)) as store:
+                with patch('webapp.store.current_time',return_value=start):plan=store.plan_task_start_break()
+                store.apply_task_workflow(plan);n=r.Notifications(root);r.tick(store,n,morning)
+                self.assertEqual('done',store.get_entity(plan.target_entity_id).frontmatter['status']);self.assertIsNone(n.current(morning)['id'])
+            archive=pathlib.Path(output)/'policy.tar';r.backup(root,archive);saved=p.read()
+            value=p.read();value['quiet_enabled']=False;p.update(value);r.restore(root,archive)
+            self.assertEqual(saved,Preferences(root).read())
+
     def test_restore_refuses_running_service(self):
         import local_runtime as r
         with tempfile.TemporaryDirectory() as t, tempfile.TemporaryDirectory() as o:

@@ -52,6 +52,8 @@ _SHELL_ROUTES = frozenset(
     }
 )
 _STATIC_ROUTES = {
+    "/assets/notification-settings.js": ("notification-settings.js", "text/javascript; charset=utf-8"),
+    "/assets/notification-settings.css": ("notification-settings.css", "text/css; charset=utf-8"),
     "/assets/timetracker-nx.js": ("timetracker-nx.js", "text/javascript; charset=utf-8"),
     "/assets/timetracker-nx.css": ("timetracker-nx.css", "text/css; charset=utf-8"),
     "/assets/integration-settings.js": ("integration-settings.js", "text/javascript; charset=utf-8"),
@@ -83,10 +85,11 @@ _STATIC_ROUTES = {
     "/assets/local-background.svg": ("local-background.svg", "image/svg+xml"),
 }
 _MUTATION_ROUTES = frozenset(
-    {"/api/v1/mutations/preview", "/api/v1/mutations/apply", "/api/v1/local-notifications/heartbeat", "/api/v1/outlook-import/run", "/api/v1/outlook-import/local", "/api/v1/integrations/settings", "/api/v1/integrations/actual-write", "/api/v1/integrations/actual-preview", "/api/v1/integrations/actual-apply", "/api/v1/integrations/actual-reconcile", "/api/v1/integrations/task"}
+    {"/api/v1/notifications/settings", "/api/v1/mutations/preview", "/api/v1/mutations/apply", "/api/v1/local-notifications/heartbeat", "/api/v1/outlook-import/run", "/api/v1/outlook-import/local", "/api/v1/integrations/settings", "/api/v1/integrations/actual-write", "/api/v1/integrations/actual-preview", "/api/v1/integrations/actual-apply", "/api/v1/integrations/actual-reconcile", "/api/v1/integrations/task"}
 )
 _READ_API_ROUTES = frozenset(
     {
+        "/api/v1/notifications/settings",
         "/api/v1/health",
         "/api/v1/calendar",
         "/api/v1/outlook-import/status",
@@ -668,7 +671,7 @@ def create_server(
 ) -> ThreadingHTTPServer:
     """Create a closed-by-default threaded server over one long-lived Store."""
     from webapp.api import ApiState, handle
-    from webapp.store import Store, InputError
+    from webapp.store import Store, InputError, StoreLockTimeout
     from webapp.local_calendar import calendar_projection, JST
     from webapp.local_capture import CaptureImporter
     from webapp.outlook_import import OutlookImport, ImportError as OutlookImportError
@@ -734,6 +737,18 @@ def create_server(
             if extra is not None:
                 return extra
         _, method, path, query = args[:4]
+        if path == "/api/v1/notifications/settings":
+            from webapp.notification_preferences import Preferences, PreferenceError, decode
+            try:
+                preferences = Preferences(root)
+                if method == "GET" and not query: return 200, preferences.read()
+                if method != "POST" or query: raise PreferenceError("invalid_request")
+                with store.mutation_lock():
+                    if store._recovery_required_locked(): raise PreferenceError("recovery_required")
+                    return 200, preferences.update(decode(args[5]))
+            except (PreferenceError, ValueError, TypeError, OSError, StoreLockTimeout) as error:
+                code = "busy" if isinstance(error, StoreLockTimeout) else str(error) if isinstance(error, PreferenceError) else "invalid_request"
+                return (409 if code in {"conflict", "busy", "recovery_required"} else 400), _error_payload(code, "通知設定を確認してください。")
         if path == "/api/v1/capture-import/status":
             if method != "GET" or query:
                 return 400, _error_payload("invalid_request", "GET without query is required")

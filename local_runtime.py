@@ -16,6 +16,7 @@ import tempfile
 import threading
 import time
 from webapp.store import Store, focus_monitor_pause_deadline
+from webapp.notification_preferences import Preferences
 from scripts.validate_frontmatter import validate_repository
 
 JST = dt.timezone(dt.timedelta(hours=9))
@@ -74,6 +75,9 @@ def _archive(root: Path, output: Path):
             member=tarfile.TarInfo('.local-state/outlook-import/state.json');member.size=len(raw);member.mode=0o600
             tar.addfile(member,__import__('io').BytesIO(raw))
 
+    preferences=Preferences(root);preferences.read()
+    if preferences.path.exists():
+        with tarfile.open(output,'a') as tar: tar.add(preferences.path,arcname='.local-state/notifications/settings.json',recursive=False)
     from webapp.integrations.state import IntegrationState
     with tarfile.open(output,'a') as tar:
         for path in IntegrationState(root).snapshot_files():
@@ -87,7 +91,7 @@ def backup(root: Path, output: Path):
     from webapp.timetracker_nx import Journal
     nx_path=IntegrationState(root).directory/'timetracker-nx.json'
     nx_lock=Journal(nx_path).exclusive() if nx_path.exists() else contextlib.nullcontext()
-    with runtime_claim(root), contextlib.closing(Store(root)) as store, store.mutation_lock(), OutlookImport(root).lock(), IntegrationState(root).lock(), nx_lock:
+    with runtime_claim(root), contextlib.closing(Store(root)) as store, store.mutation_lock(), OutlookImport(root).lock(), IntegrationState(root).lock(), Preferences(root).lock(), nx_lock:
         errors=validate_repository(root)
         if errors: raise ValueError('data validation failed; backup refused')
         output.parent.mkdir(parents=True,exist_ok=True)
@@ -108,7 +112,7 @@ def restore(root: Path, archive: Path):
                 valid=any(p.is_relative_to(Path(d)) for d in DIRECTORIES) and p.suffix=='.md'
                 receipt=re.fullmatch(r'\.local-state/capture-receipts/[0-9a-f]{64}\.json',member.name)
                 integration=re.fullmatch(r'\.local-state/integrations/(?:settings|timetracker-nx|receipt-[0-9a-f]{64})\.json',member.name)
-                if not valid and not integration and member.name!='.webapp-mutation-state' and not receipt and member.name!='.local-state/outlook-import/state.json': raise ValueError('unexpected archive member')
+                if not valid and not integration and member.name!='.webapp-mutation-state' and not receipt and member.name!='.local-state/outlook-import/state.json' and member.name!='.local-state/notifications/settings.json': raise ValueError('unexpected archive member')
             tar.extractall(staging,members=members,filter='data')
         if validate_repository(staging): raise ValueError('restored data fails schema validation')
         recovery=staging/'.webapp-mutation-state'
@@ -121,6 +125,7 @@ def restore(root: Path, archive: Path):
         OutlookImport(staging).state()
         from webapp.integrations.state import IntegrationState
         IntegrationState(staging).snapshot_files()
+        Preferences(staging).read()
         with contextlib.closing(Store(root)) as store,store.mutation_lock():
             stamp=dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
             safety=root/'.local-state'/f'pre-restore-{stamp}.tar'; _archive(root,safety)
@@ -144,23 +149,30 @@ def restore(root: Path, archive: Path):
             staged_integrations=staging/'.local-state/integrations'
             if target_integrations.exists():shutil.rmtree(target_integrations)
             if staged_integrations.exists():shutil.copytree(staged_integrations,target_integrations)
+            target_notifications=root/'.local-state/notifications'
+            staged_notifications=staging/'.local-state/notifications'
+            if target_notifications.exists(): shutil.rmtree(target_notifications)
+            if staged_notifications.exists(): shutil.copytree(staged_notifications,target_notifications)
             marker.unlink()
         return safety
 
 class Notifications:
     def __init__(self,root):
         self.root=root; self.lock=threading.Lock(); self.native_at=None
-        self.event={'id':None,'text':None}; self.last_key=None; self.at=None
-    def publish(self,key,text,now):
+        self.event={'id':None,'text':None}; self.last_key=None; self.at=None; self.kind=None; self.preferences=Preferences(root)
+    def publish(self,key,text,now,kind=None,occurred_at=None):
         with self.lock:
             if key==self.last_key: return
-            self.last_key=key; self.at=now
+            self.last_key=key; self.at=now; self.kind=kind
+            if not self.preferences.allows(kind,now) or (occurred_at is not None and not self.preferences.allows(kind,occurred_at)):
+                self.event={'id':None,'text':None}; return
             self.event={'id':hashlib.sha256(key.encode()).hexdigest()[:24],'text':text}
     def heartbeat(self,now):
         with self.lock: self.native_at=now
     def current(self,now):
         with self.lock:
             active=self.native_at is not None and 0 <= (now-self.native_at).total_seconds()<90
+            if not self.preferences.allows(self.kind,now): self.event={'id':None,'text':None}
             value=self.event if self.at and 0 <= (now-self.at).total_seconds()<90 else {'id':None,'text':None}
             return {**value,'native_active':active}
 
@@ -175,7 +187,7 @@ def tick(store,notifications,now):
             store.apply_task_workflow(plan)
             actual=store.get_entity(task.entity_id)
             if actual.frontmatter.get('status')!='done': raise RuntimeError('break completion readback failed')
-            notifications.publish('break:'+task.entity_id,'5分休憩が終わりました',now)
+            notifications.publish('break:'+task.entity_id,'5分休憩が終わりました',now,'break_finished',end)
         return
     plan=store.plan_available_task_releases(now)
     if plan is not None:
@@ -188,9 +200,10 @@ def tick(store,notifications,now):
     slot=int(now.timestamp()//300)
     if len(doing)!=1:
         text='進行中タスクなし' if not doing else '監視不能（複数doing）'
-        notifications.publish(f'focus:{slot}:{len(doing)}',text,now); return
+        notifications.publish(f'focus:{slot}:{len(doing)}',text,now,'focus_anomaly'); return
     task=doing[0]
     if focus_monitor_pause_deadline(task.body,now): return
+    kind='focus_anomaly'
     start=task.frontmatter.get('work_started_at')
     try:
         started=dt.datetime.fromisoformat(start)
@@ -198,9 +211,9 @@ def tick(store,notifications,now):
         elapsed=(now-started).total_seconds()
         if elapsed<0: text='監視不能（開始時刻が未来）'
         elif elapsed<1500: return
-        else: text='進行中タスクが25分を超えています。中断または完了してください'
+        else: text='進行中タスクが25分を超えています。中断または完了してください'; kind='focus_reminder'
     except (TypeError,ValueError): text='開始時刻未記録'
-    notifications.publish(f'focus:{task.entity_id}:{slot}',text,now)
+    notifications.publish(f'focus:{task.entity_id}:{slot}',text,now,kind)
 
 def serve(root: Path,*,container=False,capture_folder=None,outlook_folder=None,timetracker_config=None):
     initialize(root)
@@ -224,7 +237,7 @@ def serve(root: Path,*,container=False,capture_folder=None,outlook_folder=None,t
             while not stopped.is_set():
                 try: tick(server._mokvia_store,notifications,dt.datetime.now(dt.timezone.utc))
                 except Exception:
-                    notifications.publish('monitor-failed:'+str(int(time.time()//300)),'監視不能（状態を確認してください）',dt.datetime.now(dt.timezone.utc))
+                    notifications.publish('monitor-failed:'+str(int(time.time()//300)),'監視不能（状態を確認してください）',dt.datetime.now(dt.timezone.utc),'focus_anomaly')
                     # Stateful failures stop automatic mutations; no retry of an unknown apply.
                     return
                 stopped.wait(10)
